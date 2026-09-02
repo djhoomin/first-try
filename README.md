@@ -58,7 +58,22 @@ for your own auth.
 ```bash
 first-try tasks                    # list the suite
 first-try run --only T09,T11,T12   # the three that cost nothing
+first-try run --resources none     # hide the server's MCP resources
 ```
+
+## Resources
+
+MCP servers publish **resources** as well as tools, and servers often put their
+model catalogue there. But the model-facing tool APIs have no native notion of a
+resource, and most clients surface them to the human rather than the model.
+
+A benchmark that silently ignores them measures a client that cannot read the
+server's own documentation, which makes any conclusion about capability
+discovery unsupported. So by default the server's resources are offered to the
+model as two extra tools, `list_resources` and `read_resource`, and the report
+says so. `--resources none` reproduces the stricter reading. The mode is
+recorded on every transcript, because a discoverability score means a different
+thing under each.
 
 ## How spending is controlled
 

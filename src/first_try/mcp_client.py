@@ -24,7 +24,13 @@ from concurrent.futures import Future
 from contextlib import AsyncExitStack
 from typing import Any, Awaitable, Callable
 
-__all__ = ["McpSession", "to_anthropic_tools", "to_openai_tools"]
+__all__ = [
+    "McpSession",
+    "ResourceTools",
+    "SessionWithResources",
+    "to_anthropic_tools",
+    "to_openai_tools",
+]
 
 Opener = Callable[[AsyncExitStack], Awaitable[Any]]
 
@@ -144,6 +150,18 @@ class McpSession:
 
         return self._submit(_list)
 
+    def read_resource(self, uri: str) -> Any:
+        """Fetch one resource by URI."""
+
+        async def _read():
+            result = await self._session.read_resource(uri)
+            out = []
+            for item in result.contents or []:
+                out.append(getattr(item, "text", None) or getattr(item, "blob", None) or str(item))
+            return {"uri": uri, "contents": out}
+
+        return self._submit(_read)
+
     def call_tool(self, name: str, args: dict[str, Any]) -> Any:
         """Execute a tool. Raises on server error so the interceptor records it."""
 
@@ -196,3 +214,91 @@ def to_openai_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
         }
         for t in tools
     ]
+
+
+# --- exposing resources to a model that can only call tools -----------------
+
+
+class ResourceTools:
+    """Presents MCP resources as two ordinary tools.
+
+    Resources are a first-class part of MCP, but most clients surface them to
+    the *human* (as attachments or mentions) rather than to the model, and the
+    model-facing tool APIs have no native notion of them. A benchmark that never
+    exposes them is measuring a client that cannot read a server's own
+    documentation, which for FLUX means the `bfl://models` catalogue is
+    unreachable and any conclusion about capability discovery is unsupported.
+
+    This is a methodological choice rather than a neutral one, so it is recorded
+    on the transcript and named in the report. `--resources none` reproduces the
+    stricter reading, where a server's resources simply are not available.
+    """
+
+    LIST = "list_resources"
+    READ = "read_resource"
+
+    def __init__(self, session: McpSession, taken: set[str] | None = None) -> None:
+        self.session = session
+        taken = taken or set()
+        # Never shadow a real tool. If the server already owns the name, the
+        # server wins and ours moves aside.
+        self.list_name = self.LIST if self.LIST not in taken else f"mcp_{self.LIST}"
+        self.read_name = self.READ if self.READ not in taken else f"mcp_{self.READ}"
+
+    @property
+    def names(self) -> set[str]:
+        return {self.list_name, self.read_name}
+
+    def definitions(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "name": self.list_name,
+                "description": (
+                    "List the resource URIs this server publishes. Resources hold "
+                    "reference material such as model catalogues and capability "
+                    "descriptions."
+                ),
+                "input_schema": {"type": "object", "properties": {}},
+            },
+            {
+                "name": self.read_name,
+                "description": "Read one resource by its URI, as returned by listing them.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"uri": {"type": "string", "description": "The resource URI"}},
+                    "required": ["uri"],
+                },
+            },
+        ]
+
+    def handles(self, name: str) -> bool:
+        return name in self.names
+
+    def call_tool(self, name: str, args: dict[str, Any]) -> Any:
+        if name == self.list_name:
+            return {"resources": self.session.list_resources()}
+        if name == self.read_name:
+            uri = (args or {}).get("uri")
+            if not uri:
+                raise ValueError("read_resource needs a uri; call list_resources first")
+            return self.session.read_resource(uri)
+        raise KeyError(name)
+
+
+class SessionWithResources:
+    """Routes the synthetic resource tools, passes everything else through."""
+
+    def __init__(self, session: McpSession, resources: ResourceTools) -> None:
+        self.session = session
+        self.resources = resources
+
+    def list_tools(self) -> list[dict[str, Any]]:
+        return self.session.list_tools() + self.resources.definitions()
+
+    def call_tool(self, name: str, args: dict[str, Any]) -> Any:
+        if self.resources.handles(name):
+            return self.resources.call_tool(name, args)
+        return self.session.call_tool(name, args)
+
+    def close(self) -> None:
+        self.session.close()

@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from .interceptor import Policy
-from .mcp_client import McpSession
+from .mcp_client import McpSession, ResourceTools, SessionWithResources
 from .report import render_report
 from .runner_loop import run_suite
 from .tasks import load_tasks
@@ -31,6 +31,11 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--budget", type=float, default=5.0, help="run ceiling in USD")
     run.add_argument("--per-call-cap", type=float, default=1.0, help="block any single call above this")
     run.add_argument("--out", default="results", help="output directory")
+    run.add_argument(
+        "--resources", default="tools", choices=["tools", "none"],
+        help="expose the server's MCP resources to the model as tools (default), "
+             "or not at all, which reproduces a client that cannot reach them",
+    )
 
     rep = sub.add_parser("report", help="re-render a report from saved results")
     rep.add_argument("--results", default="results/results.json")
@@ -140,6 +145,11 @@ def main(argv: list[str] | None = None) -> int:
         session.close()
         sys.exit(connection_help(args, exc))
 
+    backend: object = session
+    if args.resources == "tools":
+        taken = {t["name"] for t in session.list_tools()}
+        backend = SessionWithResources(session, ResourceTools(session, taken))
+
     policy = Policy(dry_run=args.dry_run, budget_usd=args.budget, per_call_cap_usd=args.per_call_cap)
 
     def progress(row):
@@ -148,9 +158,11 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
 
     print(f"running {len(tasks)} tasks against {runner.name}"
-          f"{' (dry run)' if args.dry_run else ''}", file=sys.stderr)
+          f"{' (dry run)' if args.dry_run else ''}"
+          f", resources={args.resources}", file=sys.stderr)
     try:
-        rows = run_suite(tasks, runner, session, policy, on_result=progress)
+        rows = run_suite(tasks, runner, backend, policy, on_result=progress,
+                         resource_mode=args.resources)
     finally:
         session.close()
 

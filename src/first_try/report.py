@@ -88,5 +88,21 @@ def render_report(rows: list[dict[str, Any]]) -> str:
         "exact. Intended spend counts calls the harness blocked, because the agent still meant",
         "to make them.",
         "",
+        _resource_note(rows),
+        "",
     ]
     return "\n".join(out)
+
+
+def _resource_note(rows: list[dict[str, Any]]) -> str:
+    """State how resources were exposed. It changes what discoverability means."""
+    modes = {r.get("resource_mode", "tools") for r in rows}
+    if modes == {"none"}:
+        return ("The server's MCP resources were NOT exposed to the model, so it could not read "
+                "any catalogue the server publishes. Discoverability results reflect the tool "
+                "surface alone.")
+    if modes == {"tools"}:
+        return ("The server's MCP resources were exposed to the model as two extra tools, so it "
+                "could list and read them. Most real clients surface resources to the human "
+                "instead, so this is the generous reading of discoverability.")
+    return f"Mixed resource exposure across runs: {sorted(modes)}. Results are not comparable."

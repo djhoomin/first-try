@@ -16,9 +16,11 @@ from .transcript import Transcript
 __all__ = ["run_task", "run_suite"]
 
 
-def run_task(task: Task, runner: Any, session: Any, tools: list[dict], policy: Policy) -> dict[str, Any]:
+def run_task(task: Task, runner: Any, session: Any, tools: list[dict], policy: Policy,
+             resource_mode: str = "tools") -> dict[str, Any]:
     """Execute one task and score it. Never raises for a task-level failure."""
-    transcript = Transcript(task_id=task.id, runner=runner.name, dry_run=policy.dry_run)
+    transcript = Transcript(task_id=task.id, runner=runner.name, dry_run=policy.dry_run,
+                            resource_mode=resource_mode)
     effective = task.policy(policy)
     interceptor = Interceptor(session, transcript, effective)
 
@@ -53,6 +55,7 @@ def run_task(task: Task, runner: Any, session: Any, tools: list[dict], policy: P
         "spend_usd": transcript.spend_usd,
         "intended_usd": transcript.intended_usd,
         "first_tool": transcript.first_tool,
+        "resource_mode": resource_mode,
         "note": task.note,
         "stopped_early": transcript.stopped_early,
         "checks": [{"kind": r.kind, "passed": r.passed, "detail": r.detail} for r in results],
@@ -61,7 +64,7 @@ def run_task(task: Task, runner: Any, session: Any, tools: list[dict], policy: P
 
 
 def run_suite(tasks: list[Task], runner: Any, session: Any, policy: Policy,
-              on_result=None) -> list[dict[str, Any]]:
+              on_result=None, resource_mode: str = "tools") -> list[dict[str, Any]]:
     """Run every task in order, stopping if the run budget is exhausted."""
     tools = session.list_tools()
     rows: list[dict[str, Any]] = []
@@ -73,7 +76,7 @@ def run_suite(tasks: list[Task], runner: Any, session: Any, policy: Policy,
             per_call_cap_usd=policy.per_call_cap_usd,
             always_allow_free=policy.always_allow_free,
         )
-        row = run_task(task, runner, session, tools, remaining)
+        row = run_task(task, runner, session, tools, remaining, resource_mode)
         spent += row["spend_usd"]
         rows.append(row)
         if on_result:

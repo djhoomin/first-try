@@ -108,7 +108,12 @@ def estimate_call(tool: str, args: dict[str, Any]) -> Estimate:
     """
     args = args or {}
 
-    if tool in {"get_credits", "get_history", "get_result"}:
+    if tool in {
+        "get_credits", "get_history", "get_result",
+        "list_skills", "get_skill",
+        "list_resources", "read_resource",
+        "mcp_list_resources", "mcp_read_resource",
+    }:
         return ZERO
 
     if tool == "generate_image":

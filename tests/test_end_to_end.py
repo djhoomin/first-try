@@ -142,3 +142,13 @@ def test_cheap_local_checks_run_before_the_expensive_connection():
 
     source = inspect.getsource(cli.main)
     assert source.index("_make_runner(args)") < source.index("McpSession()")
+
+
+def test_report_states_how_resources_were_exposed():
+    """A discoverability number means different things under each mode."""
+    rows = _run({"T09"}, {"T09": [("get_credits", {})]})
+    serialisable = [{k: v for k, v in r.items() if k != "transcript"} for r in rows.values()]
+    assert "exposed to the model as two extra tools" in render_report(serialisable)
+    for row in serialisable:
+        row["resource_mode"] = "none"
+    assert "were NOT exposed" in render_report(serialisable)

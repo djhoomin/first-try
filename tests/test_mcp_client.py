@@ -115,3 +115,64 @@ def test_a_failing_opener_raises_on_connect_not_later():
 def test_close_is_safe_on_a_session_that_never_connected():
     """close() runs in a finally after a failure; it must not raise there."""
     McpSession().close()
+
+
+# --- exposing resources ----------------------------------------------------
+
+
+class FakeResourceSession(FakeSession):
+    async def list_resources(self):
+        class R:
+            def __init__(self, uri):
+                self.uri = uri
+        return type("Res", (), {"resources": [R("bfl://models")]})()
+
+    async def read_resource(self, uri):
+        class C:
+            text = '{"models": ["flux2_max"]}'
+        return type("Read", (), {"contents": [C()]})()
+
+
+def _resource_session():
+    recorder = Recorder()
+    session = McpSession()
+
+    async def opener(stack):
+        await stack.enter_async_context(tracked(recorder))
+        return FakeResourceSession(recorder)
+
+    session.connect_with(opener)
+    return session, recorder
+
+
+def test_resources_reach_the_model_as_tools():
+    """Without this the agent cannot read bfl://models, and any claim about
+    capability discovery is unsupported."""
+    from first_try.mcp_client import ResourceTools, SessionWithResources
+
+    session, _ = _resource_session()
+    try:
+        taken = {t["name"] for t in session.list_tools()}
+        backend = SessionWithResources(session, ResourceTools(session, taken))
+        names = [t["name"] for t in backend.list_tools()]
+        assert "list_resources" in names and "read_resource" in names
+        assert backend.call_tool("list_resources", {})["resources"] == ["bfl://models"]
+        got = backend.call_tool("read_resource", {"uri": "bfl://models"})
+        assert "flux2_max" in got["contents"][0]
+    finally:
+        session.close()
+
+
+def test_synthetic_tools_never_shadow_a_real_one():
+    from first_try.mcp_client import ResourceTools
+
+    rt = ResourceTools(session=None, taken={"list_resources"})
+    assert rt.list_name == "mcp_list_resources"
+    assert rt.read_name == "read_resource"
+
+
+def test_resource_reads_are_free():
+    from first_try.pricing import estimate_call
+
+    for tool in ("list_resources", "read_resource", "mcp_read_resource", "get_skill", "list_skills"):
+        assert estimate_call(tool, {}).usd == 0

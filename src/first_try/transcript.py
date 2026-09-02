@@ -42,6 +42,8 @@ class Transcript:
     task_id: str
     runner: str
     dry_run: bool
+    #: How MCP resources were exposed to the model: "tools" or "none".
+    resource_mode: str = "tools"
     calls: list[ToolCall] = field(default_factory=list)
     messages: list[dict[str, Any]] = field(default_factory=list)
     final_text: str = ""
