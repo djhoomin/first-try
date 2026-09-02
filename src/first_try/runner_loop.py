@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from .checks import run_checks
+from .mcp_client import McpTimeout
 from .interceptor import Interceptor, Policy
 from .tasks import Task
 from .transcript import Transcript
@@ -81,4 +82,9 @@ def run_suite(tasks: list[Task], runner: Any, session: Any, policy: Policy,
         rows.append(row)
         if on_result:
             on_result(row)
+        if "McpTimeout" in (row.get("stopped_early") or ""):
+            # The transport is gone. Every remaining task would time out in
+            # turn, so stop rather than burning the wall clock proving it.
+            row["note"] = (row.get("note") or "") + " [suite aborted: transport timed out]"
+            break
     return rows

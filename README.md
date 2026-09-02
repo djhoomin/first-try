@@ -59,7 +59,21 @@ for your own auth.
 first-try tasks                    # list the suite
 first-try run --only T09,T11,T12   # the three that cost nothing
 first-try run --resources none     # hide the server's MCP resources
+first-try run --resume             # skip tasks already recorded
 ```
+
+## Interruptions
+
+Results are written after **every** task, not at the end of the suite. A run
+that is interrupted, times out, or has its machine put to sleep keeps everything
+it already earned, and `--resume` picks up from there without re-running or
+re-paying for what is already recorded.
+
+Calls time out (`--call-timeout`, 300s by default) rather than blocking
+forever, because a sleeping laptop kills the connection behind the bridge
+without erroring: nothing fails, the response simply never arrives. If a call
+does time out the suite stops there instead of grinding through the remaining
+tasks to prove the transport is still dead.
 
 ## Resources
 

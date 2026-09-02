@@ -21,11 +21,13 @@ from __future__ import annotations
 import asyncio
 import threading
 from concurrent.futures import Future
+from concurrent.futures import TimeoutError as FuturesTimeout
 from contextlib import AsyncExitStack
 from typing import Any, Awaitable, Callable
 
 __all__ = [
     "McpSession",
+    "McpTimeout",
     "ResourceTools",
     "SessionWithResources",
     "to_anthropic_tools",
@@ -34,11 +36,26 @@ __all__ = [
 
 Opener = Callable[[AsyncExitStack], Awaitable[Any]]
 
+#: Generous by default. Image batches take a while, and video returns a
+#: request id immediately rather than blocking for the render.
+DEFAULT_CALL_TIMEOUT_S = 300.0
+
+
+class McpTimeout(TimeoutError):
+    """A call did not come back. Usually a transport that died quietly.
+
+    A laptop going to sleep mid-run is the common cause: the HTTP connection
+    behind the bridge is gone, nothing errors, and the future never resolves.
+    Waiting forever is the worst available behaviour, so we stop.
+    """
+
+
 
 class McpSession:
     """Connect once, call many times, close cleanly, all on one task."""
 
-    def __init__(self) -> None:
+    def __init__(self, call_timeout: float = DEFAULT_CALL_TIMEOUT_S) -> None:
+        self.call_timeout = call_timeout
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._run_loop, daemon=True, name="mcp-loop")
         self._thread.start()
@@ -83,7 +100,13 @@ class McpSession:
             raise RuntimeError("not connected: call connect_stdio or connect_http first")
         future: Future = Future()
         self._loop.call_soon_threadsafe(self._queue.put_nowait, (factory, future))
-        return future.result()
+        try:
+            return future.result(timeout=self.call_timeout)
+        except FuturesTimeout as exc:
+            raise McpTimeout(
+                f"no response after {self.call_timeout:.0f}s. The connection to the "
+                "server is probably dead; if the machine slept mid-run, that is why."
+            ) from exc
 
     # --- connection --------------------------------------------------------
 

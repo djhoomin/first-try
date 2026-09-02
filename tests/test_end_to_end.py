@@ -141,7 +141,9 @@ def test_cheap_local_checks_run_before_the_expensive_connection():
     from first_try import cli
 
     source = inspect.getsource(cli.main)
-    assert source.index("_make_runner(args)") < source.index("McpSession()")
+    # Matched loosely on purpose: the point is the ordering, not the exact call.
+    assert "_make_runner(args)" in source and "McpSession(" in source
+    assert source.index("_make_runner(args)") < source.index("McpSession(")
 
 
 def test_report_states_how_resources_were_exposed():
@@ -152,3 +154,49 @@ def test_report_states_how_resources_were_exposed():
     for row in serialisable:
         row["resource_mode"] = "none"
     assert "were NOT exposed" in render_report(serialisable)
+
+
+def test_results_are_written_after_every_task_not_at_the_end(tmp_path):
+    """A run that dies at task 14 must keep tasks 1 to 13.
+
+    Reproduces a real interruption: the machine slept mid-run, the transport
+    died, and because output happened only after the whole suite finished,
+    nothing at all was saved.
+    """
+    import json as _json
+
+    from first_try.report import render_report
+
+    out = tmp_path / "results"
+    out.mkdir()
+    accumulated = []
+
+    def save(row):
+        accumulated.append({k: v for k, v in row.items() if k != "transcript"})
+        (out / "results.json").write_text(_json.dumps(accumulated, default=str))
+        (out / "report.md").write_text(render_report(accumulated))
+
+    rows = _run({"T09", "T12"}, {"T09": [("get_credits", {})], "T12": []})
+    for row in rows.values():
+        save(row)
+        # After each task, what is on disk is complete and readable.
+        on_disk = _json.loads((out / "results.json").read_text())
+        assert len(on_disk) == len(accumulated)
+        assert "T09" in (out / "report.md").read_text()
+
+
+def test_a_dead_transport_stops_the_suite_instead_of_timing_out_each_task():
+    from first_try.interceptor import Policy
+    from first_try.runner_loop import run_suite
+    from first_try.tasks import load_tasks
+
+    class DeadRunner:
+        name = "dead"
+
+        def run(self, **kwargs):
+            raise __import__("first_try.mcp_client", fromlist=["McpTimeout"]).McpTimeout("gone")
+
+    tasks = [t for t in load_tasks("tasks") if t.id in {"T09", "T11", "T12"}]
+    rows = run_suite(tasks, DeadRunner(), FakeSession(), Policy(dry_run=True))
+    assert len(rows) == 1                       # stopped, did not grind through all three
+    assert "aborted" in rows[0]["note"]

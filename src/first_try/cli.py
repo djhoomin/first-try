@@ -31,6 +31,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--budget", type=float, default=5.0, help="run ceiling in USD")
     run.add_argument("--per-call-cap", type=float, default=1.0, help="block any single call above this")
     run.add_argument("--out", default="results", help="output directory")
+    run.add_argument("--resume", action="store_true",
+                     help="skip tasks already recorded in the output directory for this runner")
+    run.add_argument("--call-timeout", type=float, default=300.0,
+                     help="seconds to wait for one tool call before giving up on the transport")
     run.add_argument(
         "--resources", default="tools", choices=["tools", "none"],
         help="expose the server's MCP resources to the model as tools (default), "
@@ -133,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
     # fail on an import that could have been checked instantly.
     runner = _make_runner(args)
 
-    session = McpSession()
+    session = McpSession(call_timeout=args.call_timeout)
     try:
         if args.stdio:
             parts = args.stdio.split()
@@ -152,30 +156,61 @@ def main(argv: list[str] | None = None) -> int:
 
     policy = Policy(dry_run=args.dry_run, budget_usd=args.budget, per_call_cap_usd=args.per_call_cap)
 
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    results_path, report_path = out / "results.json", out / "report.md"
+
+    # Rows already on disk for this runner. Resuming is not a convenience: a
+    # long live run that dies at task 14 would otherwise have to be paid for
+    # twice.
+    done: list[dict] = []
+    if args.resume and results_path.exists():
+        previous = json.loads(results_path.read_text(encoding="utf-8"))
+        done = [r for r in previous if r.get("runner") == runner.name]
+        already = {r["task_id"] for r in done}
+        skipped = [t.id for t in tasks if t.id in already]
+        tasks = [t for t in tasks if t.id not in already]
+        if skipped:
+            print(f"resuming, skipping {len(skipped)}: {', '.join(skipped)}", file=sys.stderr)
+        spent_before = sum(r.get("spend_usd", 0.0) for r in done)
+        policy = Policy(dry_run=policy.dry_run,
+                        budget_usd=max(policy.budget_usd - spent_before, 0.0),
+                        per_call_cap_usd=policy.per_call_cap_usd)
+
+    accumulated: list[dict] = list(done)
+
     def progress(row):
         mark = "review" if row["needs_review"] else ("pass" if row["passed"] else "FAIL")
         print(f"  {row['task_id']:<5} {mark:<6} ${row['intended_usd']:.3f}  {row['first_tool'] or '-'}",
               file=sys.stderr)
+        # Persist after every task. A run that is interrupted, times out or has
+        # its machine put to sleep keeps everything it already earned.
+        (out / f"transcript-{row['task_id']}-{row['runner'].replace(':', '-')}.json").write_text(
+            row["transcript"].to_json(), encoding="utf-8"
+        )
+        accumulated.append({k: v for k, v in row.items() if k != "transcript"})
+        results_path.write_text(json.dumps(accumulated, indent=2, default=str), encoding="utf-8")
+        report_path.write_text(render_report(accumulated), encoding="utf-8")
+
+    if not tasks:
+        print("nothing left to run", file=sys.stderr)
+        print(render_report(accumulated))
+        return 0
 
     print(f"running {len(tasks)} tasks against {runner.name}"
           f"{' (dry run)' if args.dry_run else ''}"
           f", resources={args.resources}", file=sys.stderr)
     try:
-        rows = run_suite(tasks, runner, backend, policy, on_result=progress,
-                         resource_mode=args.resources)
+        run_suite(tasks, runner, backend, policy, on_result=progress,
+                  resource_mode=args.resources)
+    except KeyboardInterrupt:
+        print("\ninterrupted; results so far are saved. Re-run with --resume.", file=sys.stderr)
     finally:
         session.close()
 
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    serialisable = [{k: v for k, v in row.items() if k != "transcript"} for row in rows]
-    (out / "results.json").write_text(json.dumps(serialisable, indent=2, default=str), encoding="utf-8")
-    for row in rows:
-        (out / f"transcript-{row['task_id']}-{row['runner'].replace(':', '-')}.json").write_text(
-            row["transcript"].to_json(), encoding="utf-8"
-        )
-    report = render_report(serialisable)
-    (out / "report.md").write_text(report, encoding="utf-8")
+    report = render_report(accumulated)
+    report_path.write_text(report, encoding="utf-8")
+
     print(report)
     return 0
 
