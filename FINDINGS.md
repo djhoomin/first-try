@@ -5,7 +5,7 @@ I built a benchmark to find out, and pointed it at the official FLUX MCP server.
 The premise is that an MCP server is a user interface whose user is a language
 model. Every other kind of interface gets usability testing. Agent-facing ones
 get opinions. So: fifteen realistic creative tasks, run cold through an agent
-against `mcp.bfl.ai`, with no documentation beyond what the server itself
+against `mcp.bfl.ai`, on three models from two labs, with no documentation beyond what the server itself
 exposes, scored on tool selection, first-call validity, constraint compliance,
 recovery, cost discipline and discoverability.
 
@@ -49,7 +49,15 @@ Afterwards it described what it had spent as *"4 of your 5 free video
 generations"*, because quota units are the only cost vocabulary available to it.
 No monetary figure appears anywhere in its answer.
 
-Both Claude Sonnet and Claude Opus behaved the same way.
+**Claude Opus, Claude Sonnet and Gemini 3.7 Flash all behaved the same way.** All
+three committed the call, none of them named a price.
+
+Gemini closes the argument. Asked what the platform costs, it did the most
+thorough thing available: it checked the balance, listed the server's resources,
+and read the model catalogue. Its answer reports "Paid Credit Balance: 738.6
+credits" and contains no monetary figure of any kind. An agent that finds the one
+document describing every model still cannot say what a single call costs,
+because the document does not contain that information.
 
 **Suggested fix.** A `price` field alongside `tier` in each `bfl://models` entry
 would cost nothing to add and would let an agent answer the question at all.
@@ -59,23 +67,26 @@ looked up in advance.
 
 ## A design note: agents read tools, not resources
 
-Across fifteen tasks the agent called `get_skill` **13 times**. It called
-`read_resource` **once**, in the single task that asked it to enumerate what the
-platform can do.
+Across fifteen tasks Claude called `get_skill` **13 times** and `read_resource`
+**once**. Gemini reached for resources more readily. But the pattern that holds
+across all three models, on both labs, is sharper than either count:
 
-That asymmetry looks structural. Skills are exposed as **tools**, so a model
-reaches for them the way it reaches for anything else. `bfl://models` is exposed
-as an MCP **resource**, and the model-facing tool APIs have no native notion of
-one. Most clients surface resources to the human rather than the model. In this
-run the agent was given explicit tools to list and read resources, which is more
-access than a typical client provides, and it still went to skills almost every
-time.
+**every resource read happened in the one task that asks the agent to describe
+the platform, and none happened while it was working.**
 
-I have no evidence of harm from this. The tasks I expected it to break, it did
-not break. But `bfl://models` is where the per-model reference limits and the
-draft-first video workflow are written, and it is worth knowing that the surface
-agents actually consult is the other one. Anything an agent must know is safer in
-a skill guide or a tool description than in a resource.
+Skills are exposed as **tools**, so a model reaches for them the way it reaches
+for anything else. `bfl://models` is exposed as an MCP **resource**, and the
+model-facing tool APIs have no native notion of one. Every agent here was handed
+explicit tools to list and read resources, which is more access than most clients
+provide, and all three still treated the catalogue as reference material for
+answering questions about the platform rather than as something to consult while
+using it.
+
+I have no evidence of harm. The tasks I expected this to break, it did not break.
+But `bfl://models` is where the per-model reference limits and the draft-first
+video workflow live, and it is worth knowing that agents read it when asked what
+the platform does and not when deciding how to do something. Anything an agent
+must act on is safer in a skill guide or a tool description.
 
 ## Two documentation notes
 
@@ -100,8 +111,8 @@ It routed to the `vto` tool even when the prompt deliberately said "use the vto
 model", which is the exact trap the documentation warns about. Asked to change
 one sign on a busy shopfront, it changed the sign and nothing else. Told it was
 still working out the motion for a clip, it rendered a draft rather than a full
-pass, on both models. Given an underspecified brief, it asked a question instead
-of spending money. Before attempting a five-image blend it read the
+pass, and did so on all three models. Given an underspecified brief, Claude asked
+a question instead of spending money, though Gemini guessed. Before attempting a five-image blend it read the
 multi-reference guide first.
 
 The skills system, in short, is good and gets used heavily.
@@ -117,9 +128,9 @@ inside the limit and the interface dropped nothing. One reference is
 under-represented in the output. That is a model observation, not an interface
 defect, and I downgraded it.
 
-**I nearly published a finding that draft mode was being skipped.** Both models
+**I nearly published a finding that draft mode was being skipped.** Two models
 appeared to render a fifteen-second clip at full quality when asked for a rough
-look. Both had in fact set `draft: true`. My check read `draft` at the top level
+look. Both had in fact set `draft: true`, and a third model later did the same. My check read `draft` at the top level
 of the call while the interface also accepts it on each request, which is where
 both models put it. My own cost estimator read both locations, which is how the
 call was priced correctly at $0.90 while the check called it a failure.
@@ -138,10 +149,10 @@ mostly about the benchmark, and that the interesting work is the second pass.
 
 ## Limitations
 
-**One run per task.** Agent behaviour is stochastic and this measures a single
-sample. Treat an individual result as an anecdote. The cost finding is stated
-with confidence only because it reproduced across two models and three separate
-tasks.
+**One run per task, and only four tasks on the third model.** Agent behaviour is
+stochastic and this measures a single sample. Treat an individual result as an anecdote. The cost finding is stated
+with confidence only because it reproduced across three models from two labs, in
+three separate tasks.
 
 **Image costs are lower bounds.** FLUX.2 bills by megapixel and the published
 table quotes floor prices, so real spend is at least what is reported. Video
