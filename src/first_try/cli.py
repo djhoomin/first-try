@@ -12,6 +12,7 @@ from .mcp_client import McpSession, ResourceTools, SessionWithResources
 from .report import render_report
 from .fetch import download_media, fetch_outputs
 from .review import render_review
+from .verdicts import load_verdicts, record_verdict
 from .runner_loop import run_suite
 from .tasks import load_tasks
 
@@ -48,6 +49,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     rep = sub.add_parser("report", help="re-render a report from saved results")
     rep.add_argument("--results", default="results/results.json")
+
+    jud = sub.add_parser("judge", help="record a verdict on a task awaiting review")
+    jud.add_argument("task_id")
+    jud.add_argument("verdict", choices=["pass", "fail", "partial"])
+    jud.add_argument("--note", default="")
+    jud.add_argument("--out", default="results")
+
+    pro = sub.add_parser("probe", help="read one resource or call one free tool, and print it")
+    pro.add_argument("--resource", default="")
+    pro.add_argument("--tool", default="")
+    pro.add_argument("--args", default="{}", help="JSON arguments for --tool")
+    pro.add_argument("--stdio", default="")
+    pro.add_argument("--http", default="")
+    pro.add_argument("--header", action="append", default=[])
 
     fet = sub.add_parser("fetch", help="resolve pending generations into finished images")
     fet.add_argument("--out", default="results")
@@ -135,6 +150,32 @@ def main(argv: list[str] | None = None) -> int:
                   f"{'  (forced dry run)' if task.force_dry_run else ''}")
         return 0
 
+    if args.command == "judge":
+        entry = record_verdict(Path(args.out), args.task_id, args.verdict, args.note)
+        print(f"{entry['task_id']}: {entry['verdict']}" + (f" - {entry['note']}" if entry["note"] else ""))
+        return 0
+
+    if args.command == "probe":
+        if not args.stdio and not args.http:
+            sys.exit("supply --stdio or --http")
+        if not args.resource and not args.tool:
+            sys.exit("supply --resource or --tool")
+        session = McpSession()
+        try:
+            if args.stdio:
+                parts = args.stdio.split()
+                session.connect_stdio(parts[0], parts[1:])
+            else:
+                headers = dict(h.split(":", 1) for h in args.header)
+                session.connect_http(args.http, {k: v.strip() for k, v in headers.items()})
+            if args.resource:
+                print(json.dumps(session.read_resource(args.resource), indent=2)[:200000])
+            else:
+                print(json.dumps(session.call_tool(args.tool, json.loads(args.args)), indent=2)[:200000])
+        finally:
+            session.close()
+        return 0
+
     if args.command == "fetch":
         if not args.stdio and not args.http:
             sys.exit("supply --stdio or --http")
@@ -164,7 +205,7 @@ def main(argv: list[str] | None = None) -> int:
             data = json.loads(path.read_text(encoding="utf-8"))
             transcripts[data["task_id"]] = data
         page = out / "review.html"
-        page.write_text(render_review(rows, transcripts), encoding="utf-8")
+        page.write_text(render_review(rows, transcripts, load_verdicts(out)), encoding="utf-8")
         print(f"wrote {page}")
         return 0
 

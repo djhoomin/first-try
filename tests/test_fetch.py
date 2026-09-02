@@ -82,3 +82,41 @@ def test_review_prefers_the_local_copy_over_the_signed_url():
     page = render_review(rows, transcripts)
     assert "media/deadbeef.jpg" in page
     assert "signed.jpg" not in page
+
+
+# --- verdicts --------------------------------------------------------------
+
+
+def test_verdicts_persist_and_overwrite_cleanly(tmp_path):
+    from first_try.verdicts import load_verdicts, record_verdict
+
+    record_verdict(tmp_path, "T14", "fail", "ref4 (the thermos) is absent")
+    record_verdict(tmp_path, "T15", "pass", "no cars, people or signage")
+    record_verdict(tmp_path, "T14", "partial", "revised after a second look")
+
+    got = load_verdicts(tmp_path)
+    assert set(got) == {"T14", "T15"}
+    assert got["T14"]["verdict"] == "partial"
+    assert "revised" in got["T14"]["note"]
+    assert got["T14"]["recorded_at"]
+
+
+def test_an_unknown_verdict_is_refused(tmp_path):
+    import pytest
+
+    from first_try.verdicts import record_verdict
+
+    with pytest.raises(ValueError, match="must be one of"):
+        record_verdict(tmp_path, "T01", "probably fine")
+
+
+def test_review_shows_a_recorded_verdict():
+    from first_try.review import render_review
+
+    rows = [{"task_id": "T14", "title": "Reference-image limit", "needs_review": True,
+             "errored": False, "intended_usd": 0.03, "turns": 4,
+             "checks": [{"kind": "manual", "passed": False,
+                         "detail": "needs review: were all five used", "skipped": False}]}]
+    page = render_review(rows, {"T14": {"task_id": "T14", "calls": []}},
+                         {"T14": {"verdict": "fail", "note": "ref4 absent"}})
+    assert "Recorded: fail" in page and "ref4 absent" in page

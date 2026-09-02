@@ -50,8 +50,10 @@ def _calls_of(transcript: dict[str, Any], billable_only: bool = True) -> list[di
     return [c for c in calls if c.get("est_usd", 0) > 0] if billable_only else calls
 
 
-def render_review(rows: list[dict[str, Any]], transcripts: dict[str, dict]) -> str:
+def render_review(rows: list[dict[str, Any]], transcripts: dict[str, dict],
+                  verdicts: dict[str, dict] | None = None) -> str:
     """One page holding every outstanding judgement call."""
+    verdicts = verdicts or {}
     pending = [r for r in rows if r.get("needs_review") and not r.get("errored")]
 
     out = [f"<style>{_CSS}</style>", "<h1>first-try: judgement calls</h1>"]
@@ -68,6 +70,11 @@ def render_review(rows: list[dict[str, Any]], transcripts: dict[str, dict]) -> s
         tid = row["task_id"]
         t = transcripts.get(tid, {})
         out.append(f'<h2>{html.escape(tid)} &mdash; {html.escape(row.get("title", ""))}</h2>')
+
+        recorded = verdicts.get(tid)
+        if recorded:
+            note = f' &mdash; {html.escape(recorded["note"])}' if recorded.get("note") else ""
+            out.append(f'<div class="q"><b>Recorded: {html.escape(recorded["verdict"])}.</b>{note}</div>')
 
         for check in row.get("checks", []):
             if check["kind"] == "manual" and not check.get("skipped"):

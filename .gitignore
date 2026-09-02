@@ -5,3 +5,4 @@ results/
 .pytest_cache/
 results/media/
 results/history-raw.json
+results/verdicts.json

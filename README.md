@@ -98,6 +98,13 @@ references used. Those carry the most information and are the easiest to skip.
 the prompt, the call and the images beside it. Checks marked `manual` never
 auto-pass; they hold a task at `review` until a person answers them.
 
+Record what you decide, so a finding does not live only in your memory:
+
+```bash
+first-try judge T14 fail --note "ref4 is absent from the blend"
+first-try probe --resource "bfl://models" --stdio "..."   # check a claim before making it
+```
+
 ## Interruptions
 
 Results are written after **every** task, not at the end of the suite. A run
