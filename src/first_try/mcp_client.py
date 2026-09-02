@@ -193,7 +193,11 @@ class McpSession:
             content = [getattr(c, "text", None) or str(c) for c in (result.content or [])]
             if result.is_error:
                 raise RuntimeError("\n".join(content) or "tool reported an error")
-            return {"content": content}
+            payload: dict[str, Any] = {"content": content}
+            structured = getattr(result, "structured_content", None)
+            if structured:
+                payload["structured"] = structured
+            return payload
 
         return self._submit(_call)
 
@@ -325,3 +329,25 @@ class SessionWithResources:
 
     def close(self) -> None:
         self.session.close()
+
+
+_URL = __import__("re").compile(r"https?://[^\s\"'<>\\)]+\.(?:png|jpe?g|webp|gif|mp4|webm)", __import__("re").I)
+
+
+def image_urls(result: Any) -> list[str]:
+    """Pull output media URLs out of whatever shape a tool returned.
+
+    Deliberately dumb: servers describe results differently and a benchmark
+    should not need a per-server adapter just to look at what it produced.
+    Ordered, de-duplicated, so a contact sheet reads in call order.
+    """
+    import json as _json
+
+    try:
+        blob = result if isinstance(result, str) else _json.dumps(result, default=str)
+    except (TypeError, ValueError):
+        blob = repr(result)
+    seen: dict[str, None] = {}
+    for url in _URL.findall(blob):
+        seen.setdefault(url, None)
+    return list(seen)

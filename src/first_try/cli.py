@@ -10,6 +10,7 @@ from pathlib import Path
 from .interceptor import Policy
 from .mcp_client import McpSession, ResourceTools, SessionWithResources
 from .report import render_report
+from .review import render_review
 from .runner_loop import run_suite
 from .tasks import load_tasks
 
@@ -43,6 +44,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     rep = sub.add_parser("report", help="re-render a report from saved results")
     rep.add_argument("--results", default="results/results.json")
+
+    rev = sub.add_parser("review", help="build a contact sheet for the outstanding judgement calls")
+    rev.add_argument("--out", default="results")
 
     sub.add_parser("tasks", help="list the suite").add_argument("--tasks", default="tasks")
     return p
@@ -114,6 +118,18 @@ def main(argv: list[str] | None = None) -> int:
         for task in load_tasks(args.tasks):
             print(f"{task.id}  {task.title}  [{', '.join(task.axes)}]"
                   f"{'  (forced dry run)' if task.force_dry_run else ''}")
+        return 0
+
+    if args.command == "review":
+        out = Path(args.out)
+        rows = json.loads((out / "results.json").read_text(encoding="utf-8"))
+        transcripts = {}
+        for path in out.glob("transcript-*.json"):
+            data = json.loads(path.read_text(encoding="utf-8"))
+            transcripts[data["task_id"]] = data
+        page = out / "review.html"
+        page.write_text(render_review(rows, transcripts), encoding="utf-8")
+        print(f"wrote {page}")
         return 0
 
     if args.command == "report":

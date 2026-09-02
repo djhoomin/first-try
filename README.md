@@ -60,7 +60,18 @@ first-try tasks                    # list the suite
 first-try run --only T09,T11,T12   # the three that cost nothing
 first-try run --resources none     # hide the server's MCP resources
 first-try run --resume             # skip tasks already recorded
+first-try review                   # contact sheet for the judgement calls
 ```
+
+## Judging the rest
+
+Roughly half the suite ends in a question no assertion can answer: did the style
+transfer, is the composition intact, is the text spelled correctly, were all the
+references used. Those carry the most information and are the easiest to skip.
+
+`first-try review` builds a single page holding every outstanding question with
+the prompt, the call and the images beside it. Checks marked `manual` never
+auto-pass; they hold a task at `review` until a person answers them.
 
 ## Interruptions
 

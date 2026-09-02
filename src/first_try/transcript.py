@@ -29,6 +29,8 @@ class ToolCall:
     failed: bool = False           # the server rejected it
     error: str = ""
     result_summary: str = ""
+    #: Output media the call produced, for review.
+    result_urls: list[str] = field(default_factory=list)
     started_at: float = field(default_factory=time.time)
 
     @property

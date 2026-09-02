@@ -264,3 +264,31 @@ def test_an_errored_task_is_excluded_from_the_denominator():
     text = render_report([{k: v for k, v in row.items() if k != "transcript"}])
     assert "did not run (T15)" in text
     assert "| ERROR " in text
+
+
+def test_review_page_lists_every_open_question_and_says_when_it_cannot_show_images():
+    import json as _json
+
+    from first_try.review import render_review
+
+    rows = _run({"T01", "T05"}, {
+        "T01": [("generate_image", {"requests": [{
+            "model": "flux2_max", "prompt": "a market stall",
+            "input_medias": [{"url": "https://x.test/style.jpg"}]}]})],
+        "T05": [("generate_image", {"requests": [{"model": "flux2_flex", "prompt": "'NIGHT MARKET'"}]})],
+    })
+    serialisable = [{k: v for k, v in r.items() if k != "transcript"} for r in rows.values()]
+    transcripts = {tid: _json.loads(r["transcript"].to_json()) for tid, r in rows.items()}
+    page = render_review(serialisable, transcripts)
+
+    assert "T01" in page and "T05" in page
+    assert "does the output actually carry the reference style" in page
+    # Dry run: nothing was generated, and the page must say so rather than
+    # showing an empty grid that looks like a verdict.
+    assert "needs a live run before it can be judged" in page
+
+
+def test_review_page_is_empty_when_nothing_is_outstanding():
+    from first_try.review import render_review
+
+    assert "Nothing outstanding" in render_review([], {})

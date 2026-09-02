@@ -21,6 +21,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
+from .mcp_client import image_urls
 from .pricing import estimate_call
 from .transcript import ToolCall, Transcript
 
@@ -137,6 +138,7 @@ class Interceptor:
             return {"error": str(exc)}
 
         record.result_summary = _summarise(result)
+        record.result_urls = image_urls(result)
         return result
 
 
