@@ -192,7 +192,7 @@
       value: generate_video
     - kind: arg_equals
       tool: generate_video
-      path: draft
+      paths: [draft, "requests[*].draft"]
       value: true
     - kind: spend_at_most
       value: 1.00

@@ -69,6 +69,25 @@ def _calls_named(t: Transcript, name: str | None) -> list[Any]:
     return [c for c in t.calls if name in (None, c.name)]
 
 
+def _paths(spec: dict) -> list[str]:
+    """A check may name one path or several.
+
+    Some arguments are legitimately accepted at more than one level: FLUX takes
+    `draft` on the call or on each request in it. A check that knows only one
+    location reports a correct call as a failure, which is how this harness
+    spent a run accusing two models of skipping draft mode when both had used
+    it.
+    """
+    if spec.get("paths"):
+        return list(spec["paths"])
+    return [spec["path"]]
+
+
+def _values(t: Transcript, spec: dict) -> list[Any]:
+    calls = _calls_named(t, spec.get("tool"))
+    return [v for c in calls for path in _paths(spec) for v in resolve(c.args, path)]
+
+
 # --- individual checks -----------------------------------------------------
 
 
@@ -116,23 +135,25 @@ def never_called_tool(t: Transcript, spec: dict) -> CheckResult:
 
 
 def arg_equals(t: Transcript, spec: dict) -> CheckResult:
-    tool, path, want = spec.get("tool"), spec["path"], spec["value"]
-    values = [v for c in _calls_named(t, tool) for v in resolve(c.args, path)]
+    want = spec["value"]
+    values = _values(t, spec)
     ok = bool(values) and all(v == want for v in values)
-    return CheckResult("arg_equals", ok, f"{path} was {values or 'never set'}, expected {want}")
+    return CheckResult("arg_equals", ok,
+                       f"{' or '.join(_paths(spec))} was {values or 'never set'}, expected {want}")
 
 
 def arg_in(t: Transcript, spec: dict) -> CheckResult:
-    tool, path, allowed = spec.get("tool"), spec["path"], list(spec["value"])
-    values = [v for c in _calls_named(t, tool) for v in resolve(c.args, path)]
+    allowed = list(spec["value"])
+    values = _values(t, spec)
     ok = bool(values) and all(v in allowed for v in values)
-    return CheckResult("arg_in", ok, f"{path} was {values or 'never set'}, expected one of {allowed}")
+    return CheckResult("arg_in", ok,
+                       f"{' or '.join(_paths(spec))} was {values or 'never set'}, expected one of {allowed}")
 
 
 def arg_present(t: Transcript, spec: dict) -> CheckResult:
-    tool, path = spec.get("tool"), spec["path"]
-    values = [v for c in _calls_named(t, tool) for v in resolve(c.args, path) if v]
-    return CheckResult("arg_present", bool(values), f"{path} {'was set' if values else 'was never set'}")
+    values = [v for v in _values(t, spec) if v]
+    return CheckResult("arg_present", bool(values),
+                       f"{' or '.join(_paths(spec))} {'was set' if values else 'was never set'}")
 
 
 def arg_absent(t: Transcript, spec: dict) -> CheckResult:
