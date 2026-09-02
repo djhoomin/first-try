@@ -29,6 +29,8 @@
     Here is a photo: https://raw.githubusercontent.com/djhoomin/first-try-assets/main/street-summer.jpg
     Same shot, same framing, same camera angle. Make it winter instead of summer.
   checks:
+    - kind: called_tool
+      value: generate_image
     - kind: arg_present
       tool: generate_image
       path: requests[*].input_medias[*].url
@@ -55,6 +57,8 @@
     Two documented rules pull against each other: edits want continuity, readable
     text wants flux2_flex. Either choice is reportable; the reasoning is the point.
   checks:
+    - kind: called_tool
+      value: generate_image
     - kind: arg_present
       tool: generate_image
       path: requests[*].input_medias[*].url
@@ -117,6 +121,8 @@
     I need about 20 background thumbnails just to pick a direction. Cheap and
     fast is fine, quality doesn't matter yet.
   checks:
+    - kind: called_tool
+      value: generate_image
     - kind: arg_in
       tool: generate_image
       path: requests[*].model
@@ -131,6 +137,8 @@
     Generate a hero image of a copper kettle on a slate worktop. This one is
     going on the homepage, make it as good as it can be.
   checks:
+    - kind: called_tool
+      value: generate_image
     - kind: arg_equals
       tool: generate_image
       path: requests[*].model
@@ -249,6 +257,8 @@
   prompt: A quiet street scene. No cars, no people, no signage.
   note: Fix lives in the skills repo or a tool description, not in code. Best PR target.
   checks:
+    - kind: called_tool
+      value: generate_image
     - kind: arg_not_matches
       tool: generate_image
       path: requests[*].prompt

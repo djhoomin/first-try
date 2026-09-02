@@ -236,14 +236,15 @@ def test_reconnaissance_before_generating_is_not_a_miss():
 def test_a_task_that_did_nothing_does_not_pass():
     """T15 scored as a pass after the API refused the request.
 
-    No generate_image call happened, so the negative assertion had nothing to
-    match against and passed vacuously, and spend_at_most passed because
-    nothing was spent. A non-event must never count toward the score.
+    Two holes. The negative assertion had no prompts to match against and
+    passed vacuously, and nothing required the task to generate at all, so
+    spend_at_most passed on its own. A non-event must never score.
     """
     rows = _run({"T15"}, {"T15": [("get_skill", {"name": "flux-image-best-practices"})]})
     row = rows["T15"]
-    assert not row["passed"]
-    assert "arg_not_matches" in row["skipped"]
+    assert not row["passed"], row["checks"]
+    assert "arg_not_matches" in row["skipped"]      # no evidence, so not scored
+    assert any(c["kind"] == "called_tool" and not c["passed"] for c in row["checks"])
 
 
 def test_an_errored_task_is_excluded_from_the_denominator():
