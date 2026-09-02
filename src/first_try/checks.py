@@ -28,6 +28,10 @@ class CheckResult:
     kind: str
     passed: bool
     detail: str
+    #: Not measurable under this run's conditions. Neither a pass nor a
+    #: failure, and excluded from the score. A benchmark that reports an
+    #: unmeasurable thing as a failure is manufacturing findings.
+    skipped: bool = False
 
 
 def resolve(obj: Any, path: str) -> list[Any]:
@@ -74,6 +78,29 @@ def first_tool_is(t: Transcript, spec: dict) -> CheckResult:
         "first_tool_is", got == want,
         f"first tool called was {got or 'none'}, expected {want}",
     )
+
+
+def first_generating_tool_is(t: Transcript, spec: dict) -> CheckResult:
+    """Which tool it chose to do the work, ignoring free reconnaissance.
+
+    Agents routinely read a server's skill guides or check credits before
+    acting, which is good behaviour. `first_tool_is` punishes it. This asks the
+    question that was actually meant: of the calls that cost money, which came
+    first.
+    """
+    want = spec["value"]
+    billable = [c for c in t.calls if c.est_usd > 0]
+    got = billable[0].name if billable else None
+    return CheckResult(
+        "first_generating_tool_is", got == want,
+        f"first billable call was {got or 'none'}, expected {want}",
+    )
+
+
+def called_tool_times(t: Transcript, spec: dict) -> CheckResult:
+    want, times = spec["value"], int(spec["times"])
+    got = t.tool_names.count(want)
+    return CheckResult("called_tool_times", got == times, f"{want} called {got} times, expected {times}")
 
 
 def called_tool(t: Transcript, spec: dict) -> CheckResult:
@@ -151,7 +178,20 @@ def no_generation(t: Transcript, spec: dict) -> CheckResult:
 
 
 def turns_to_success_at_most(t: Transcript, spec: dict) -> CheckResult:
+    """Turns until a generating call went through cleanly.
+
+    Unmeasurable in a dry run: every billable call is blocked by policy, so
+    nothing ever "succeeds" and the check would fail for reasons that have
+    nothing to do with the platform. Recovery needs a live run.
+    """
     cap = int(spec["value"])
+    if t.dry_run:
+        return CheckResult(
+            "turns_to_success_at_most", False,
+            "not measurable in a dry run: billable calls never execute, so recovery "
+            "cannot be observed. Run this task live.",
+            skipped=True,
+        )
     got = t.turns_to_first_success()
     ok = got is not None and got <= cap
     return CheckResult("turns_to_success_at_most", ok, f"first clean generation on turn {got}, cap {cap}")
@@ -170,6 +210,8 @@ def manual(t: Transcript, spec: dict) -> CheckResult:
 
 CHECKS: dict[str, Callable[[Transcript, dict], CheckResult]] = {
     "first_tool_is": first_tool_is,
+    "first_generating_tool_is": first_generating_tool_is,
+    "called_tool_times": called_tool_times,
     "called_tool": called_tool,
     "never_called_tool": never_called_tool,
     "arg_equals": arg_equals,

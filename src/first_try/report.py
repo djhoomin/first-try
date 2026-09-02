@@ -49,12 +49,26 @@ def render_report(rows: list[dict[str, Any]]) -> str:
         out.append(f"| {axis} | {ok}/{total} |")
     out.append("")
 
+    unmeasured = sorted({k for r in rows for k in r.get("skipped", [])})
+    if unmeasured:
+        out += ["## Not measured in this run", "",
+                "These checks could not be evaluated under this run's conditions and are",
+                "excluded from every score above, rather than counted as failures:", ""]
+        for kind in unmeasured:
+            affected = [r["task_id"] for r in rows if kind in r.get("skipped", [])]
+            detail = next(c["detail"] for r in rows for c in r["checks"]
+                          if c["kind"] == kind and c.get("skipped"))
+            out.append(f"- **{kind}** ({', '.join(sorted(set(affected)))}): {detail}")
+        out.append("")
+
     failures = [r for r in rows if not r["passed"]]
     if failures:
         out += ["## What failed", ""]
         for row in failures:
             out.append(f"### {row['task_id']} - {row['title']}  ({row['runner']})")
             for check in row["checks"]:
+                if check.get("skipped"):
+                    continue
                 if not check["passed"]:
                     out.append(f"- **{check['kind']}**: {check['detail']}")
             if row["intended_usd"] > row["spend_usd"]:

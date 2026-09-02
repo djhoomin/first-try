@@ -12,11 +12,11 @@
     Generate a market stall in that style. The style needs to match what's in
     the reference, the subject is new.
   checks:
-    - kind: first_tool_is
+    - kind: first_generating_tool_is
       value: generate_image
     - kind: arg_present
       tool: generate_image
-      path: requests[*].input_image
+      path: requests[*].input_medias[*].url
     - kind: spend_at_most
       value: 0.10
     - kind: manual
@@ -31,7 +31,7 @@
   checks:
     - kind: arg_present
       tool: generate_image
-      path: requests[*].input_image
+      path: requests[*].input_medias[*].url
     - kind: arg_matches
       tool: generate_image
       path: requests[*].prompt
@@ -57,7 +57,7 @@
   checks:
     - kind: arg_present
       tool: generate_image
-      path: requests[*].input_image
+      path: requests[*].input_medias[*].url
     - kind: arg_matches
       tool: generate_image
       path: requests[*].prompt
@@ -70,25 +70,25 @@
 - id: T04
   title: Iterate rather than regenerate
   axes: [tool_selection, cost_discipline]
-  setup:
-    - role: user
-      content: Generate four options for a misty pine forest at dawn.
-    - role: assistant
-      content: >-
-        I generated four options. Their request ids are req-a1, req-a2, req-a3
-        and req-a4.
-  prompt: The third one is closest. Give me four more in that direction.
+  note: >-
+    Earlier versions primed this with fabricated request ids. The agent called
+    get_history, found they did not exist, and regenerated, which is right. The
+    task now has it produce its own batch so the ids it varies from are real.
+  prompt: >-
+    Generate four options for a misty pine forest at dawn. Then take the third
+    one and give me four more in that direction.
   checks:
+    - kind: called_tool_times
+      value: generate_image
+      times: 1
     - kind: called_tool
       value: generate_variations
-    - kind: never_called_tool
-      value: generate_image
-    - kind: arg_matches
+    - kind: arg_present
       tool: generate_variations
       path: request_id
-      value: "req-a3"
     - kind: spend_at_most
-      value: 0.15
+      value: 0.45
+
 
 - id: T05
   title: Typography
@@ -136,7 +136,7 @@
       path: requests[*].model
       value: flux2_max
     - kind: spend_at_most
-      value: 0.15
+      value: 0.30
 
 - id: T08
   title: Try-on routing
@@ -146,7 +146,7 @@
     and a photo of a jacket: https://raw.githubusercontent.com/djhoomin/first-try-assets/main/jacket.jpg
     Put the jacket on him.
   checks:
-    - kind: first_tool_is
+    - kind: first_generating_tool_is
       value: vto
     - kind: never_called_tool
       value: generate_image

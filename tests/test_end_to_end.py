@@ -200,3 +200,34 @@ def test_a_dead_transport_stops_the_suite_instead_of_timing_out_each_task():
     rows = run_suite(tasks, DeadRunner(), FakeSession(), Policy(dry_run=True))
     assert len(rows) == 1                       # stopped, did not grind through all three
     assert "aborted" in rows[0]["note"]
+
+
+def test_unmeasurable_checks_are_skipped_not_failed():
+    """Recovery cannot be observed in a dry run: every billable call is blocked.
+
+    Reporting that as a failure manufactures a finding out of the harness's own
+    safety rail, which is the worst thing a benchmark can do.
+    """
+    rows = _run({"T13"}, {"T13": [("vto", {"person": {}, "garment": {}})]})
+    row = rows["T13"]
+    assert "turns_to_success_at_most" in row["skipped"]
+    serialisable = [{k: v for k, v in row.items() if k != "transcript"}]
+    text = render_report(serialisable)
+    assert "Not measured in this run" in text
+    # and it must not appear among the failures
+    failures_section = text.split("## Not measured")[1]
+    assert "turns_to_success_at_most" in failures_section
+
+
+def test_reconnaissance_before_generating_is_not_a_miss():
+    """Reading a skill guide first is good behaviour; first_tool_is punished it."""
+    rows = _run({"T01"}, {"T01": [
+        ("get_skill", {"name": "flux-image-best-practices"}),
+        ("generate_image", {"requests": [{
+            "model": "flux2_max",
+            "prompt": "a market stall in the reference style",
+            "input_medias": [{"url": "https://example.test/style-reference.jpg"}],
+        }]}),
+    ]})
+    scored = [c for c in rows["T01"]["checks"] if not c.get("skipped") and c["kind"] != "manual"]
+    assert all(c["passed"] for c in scored), [c for c in scored if not c["passed"]]

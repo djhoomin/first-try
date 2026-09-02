@@ -42,8 +42,8 @@ def run_task(task: Task, runner: Any, session: Any, tools: list[dict], policy: P
         transcript.stopped_early = f"{type(exc).__name__}: {exc}"
 
     results = run_checks(transcript, task.checks)
-    needs_review = any(r.kind == "manual" for r in results)
-    scored = [r for r in results if r.kind != "manual"]
+    needs_review = any(r.kind == "manual" and not r.skipped for r in results)
+    scored = [r for r in results if r.kind != "manual" and not r.skipped]
 
     return {
         "task_id": task.id,
@@ -59,7 +59,11 @@ def run_task(task: Task, runner: Any, session: Any, tools: list[dict], policy: P
         "resource_mode": resource_mode,
         "note": task.note,
         "stopped_early": transcript.stopped_early,
-        "checks": [{"kind": r.kind, "passed": r.passed, "detail": r.detail} for r in results],
+        "skipped": [r.kind for r in results if r.skipped],
+        "checks": [
+            {"kind": r.kind, "passed": r.passed, "detail": r.detail, "skipped": r.skipped}
+            for r in results
+        ],
         "transcript": transcript,
     }
 
