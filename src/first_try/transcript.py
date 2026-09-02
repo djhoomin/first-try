@@ -8,11 +8,21 @@ traced back to a specific recorded call is an opinion with a number attached.
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-__all__ = ["ToolCall", "Transcript"]
+__all__ = ["ToolCall", "Transcript", "safe_name"]
+
+
+def safe_name(text: str) -> str:
+    """A runner or task name that is safe as a filename.
+
+    Model ids carry vendor prefixes with slashes in them, and a slash in a
+    filename is a directory that does not exist.
+    """
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", text).strip("-") or "unnamed"
 
 
 @dataclass

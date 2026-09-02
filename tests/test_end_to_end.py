@@ -294,3 +294,22 @@ def test_review_page_is_empty_when_nothing_is_outstanding():
     from first_try.review import render_review
 
     assert "Nothing outstanding" in render_review([], {})
+
+
+def test_a_model_id_with_a_slash_does_not_break_the_output_path():
+    """openai:google/gemini-3.7-flash wrote into a directory that did not exist."""
+    from first_try.transcript import safe_name
+
+    assert "/" not in safe_name("openai:google/gemini-3.7-flash")
+    assert safe_name("openai:google/gemini-3.7-flash") == "openai-google-gemini-3.7-flash"
+
+
+def test_the_scored_row_is_saved_before_the_transcript():
+    """Ordering matters: a failed transcript write threw away a task that had
+    already run and already cost money."""
+    import inspect
+
+    from first_try import cli
+
+    source = inspect.getsource(cli._run_command)
+    assert source.index("accumulated.append") < source.index('name = f"transcript-')

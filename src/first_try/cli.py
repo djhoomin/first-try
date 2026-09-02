@@ -10,6 +10,7 @@ from pathlib import Path
 from .interceptor import Policy
 from .mcp_client import McpSession, ResourceTools, SessionWithResources
 from .report import render_report
+from .transcript import safe_name
 from .fetch import download_media, fetch_outputs
 from .review import render_review
 from .verdicts import load_verdicts, record_verdict
@@ -289,12 +290,19 @@ def _run_command(args) -> int:
               file=sys.stderr)
         # Persist after every task. A run that is interrupted, times out or has
         # its machine put to sleep keeps everything it already earned.
-        (out / f"transcript-{row['task_id']}-{row['runner'].replace(':', '-')}.json").write_text(
-            row["transcript"].to_json(), encoding="utf-8"
-        )
+        #
+        # The scored row is recorded first and the transcript second. They were
+        # the other way round, and a runner id containing a slash made the
+        # transcript write fail, which threw away a task that had already run
+        # and cost money.
         accumulated.append({k: v for k, v in row.items() if k != "transcript"})
         results_path.write_text(json.dumps(accumulated, indent=2, default=str), encoding="utf-8")
         report_path.write_text(render_report(accumulated), encoding="utf-8")
+        try:
+            name = f"transcript-{safe_name(row['task_id'])}-{safe_name(row['runner'])}.json"
+            (out / name).write_text(row["transcript"].to_json(), encoding="utf-8")
+        except OSError as exc:
+            print(f"  (could not write the transcript for {row['task_id']}: {exc})", file=sys.stderr)
 
     if not tasks:
         print("nothing left to run", file=sys.stderr)
