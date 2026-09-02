@@ -104,3 +104,12 @@ def test_report_renders_and_names_the_failures():
     assert "## Headline" in text and "## What failed" in text
     assert "T05" in text and "T12" in text
     json.dumps(serialisable, default=str)  # results.json must be serialisable
+
+
+def test_failure_outranks_pending_review_in_the_report():
+    """A task whose scored checks failed must never read as 'review'."""
+    rows = _run({"T05"}, {"T05": [("generate_image", {"requests": [{"model": "flux2_max"}]})]})
+    serialisable = [{k: v for k, v in r.items() if k != "transcript"} for r in rows.values()]
+    text = render_report(serialisable)
+    line = next(l for l in text.splitlines() if l.startswith("| T05 "))
+    assert "fail" in line and "review" not in line

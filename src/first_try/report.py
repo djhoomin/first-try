@@ -26,13 +26,15 @@ def render_report(rows: list[dict[str, Any]]) -> str:
 
     out += ["## Headline", ""]
     for runner, runner_rows in sorted(by_runner.items()):
-        clean = sum(1 for r in runner_rows if r["passed"] and not r["needs_review"])
         total = len(runner_rows)
+        passed = sum(1 for r in runner_rows if r["passed"])
+        pending = sum(1 for r in runner_rows if r["passed"] and r["needs_review"])
         spend = sum(r["intended_usd"] for r in runner_rows)
-        pct = 100.0 * clean / total if total else 0.0
+        pct = 100.0 * passed / total if total else 0.0
+        tail = f", {pending} still awaiting a judgement call" if pending else ""
         out.append(
-            f"- **{runner}**: {clean}/{total} tasks right first try ({pct:.0f}%), "
-            f"intended spend ${spend:.2f}"
+            f"- **{runner}**: {passed}/{total} tasks right first try on the checks that "
+            f"can be scored automatically ({pct:.0f}%), intended spend ${spend:.2f}{tail}"
         )
     out.append("")
 
@@ -67,7 +69,12 @@ def render_report(rows: list[dict[str, Any]]) -> str:
     out += ["## All tasks", "", "| Task | Runner | Result | Turns | Intended $ | First tool |",
             "| --- | --- | --- | --- | --- | --- |"]
     for row in sorted(rows, key=lambda r: (r["task_id"], r["runner"])):
-        result = "review" if row["needs_review"] else ("pass" if row["passed"] else "fail")
+        # Failure outranks review. A task whose scored checks failed has failed,
+        # whether or not a judgement is still outstanding on top of it.
+        if not row["passed"]:
+            result = "fail"
+        else:
+            result = "review" if row["needs_review"] else "pass"
         out.append(
             f"| {row['task_id']} | {row['runner']} | {result} | {row['turns']} | "
             f"{row['intended_usd']:.3f} | {row['first_tool'] or '-'} |"
