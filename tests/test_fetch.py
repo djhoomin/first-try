@@ -49,7 +49,7 @@ def test_signed_urls_keep_their_query_string():
     from first_try.mcp_client import image_urls
 
     signed = ("https://app.bfl.ai/storage/v1/object/sign/bfl-mcp/abc/generations/"
-              "def.jpg?token=eyJraWQiOiJiM2Q3NDVmMy0zNjNj.sig-_123")
+              "def.jpg?token=HEADER.PAYLOAD.signature-_123")
     assert image_urls({"result": {"sample": signed}}) == [signed]
 
 

@@ -6,3 +6,5 @@ results/
 results/media/
 results/history-raw.json
 results/verdicts.json
+.DS_Store
+**/.DS_Store
