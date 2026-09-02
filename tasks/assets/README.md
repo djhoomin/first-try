@@ -4,9 +4,11 @@ Ten images. Each one has properties the task depends on, and getting them wrong
 does not make a task fail: it makes the task stop measuring anything, which is
 worse, because the run still produces a number.
 
-Host them publicly over HTTPS. Committing them here and referencing the
-`raw.githubusercontent.com` URL is the simplest option and has the side benefit
-that anyone can reproduce a run.
+These are mirrored to a public repository, **djhoomin/first-try-assets**, and the
+suite points at the `raw.githubusercontent.com` URLs there. They need a public
+host because the image API fetches them itself, so a private repository would
+block a run rather than merely hide it. Copies are kept here so the fixtures
+travel with the tasks that describe them; if you change one, push both.
 
 | File | Used by | Must be |
 | --- | --- | --- |

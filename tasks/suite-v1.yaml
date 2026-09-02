@@ -1,6 +1,6 @@
 # first-try suite v1.
 #
-# Replace every https://assets.invalid/... URL with your own royalty-free image
+# Replace every https://raw.githubusercontent.com/djhoomin/first-try-assets/main/... URL with your own royalty-free image
 # before running. Nothing here should reference material you do not own.
 
 - id: T01
@@ -8,7 +8,7 @@
   axes: [tool_selection, constraint_compliance, outcome_quality]
   prompt: >-
     Here's a reference image from our art style guide:
-    https://assets.invalid/style-reference.jpg
+    https://raw.githubusercontent.com/djhoomin/first-try-assets/main/style-reference.jpg
     Generate a market stall in that style. The style needs to match what's in
     the reference, the subject is new.
   checks:
@@ -26,7 +26,7 @@
   title: Composition preserved, content changed
   axes: [constraint_compliance, outcome_quality]
   prompt: >-
-    Here is a photo: https://assets.invalid/street-summer.jpg
+    Here is a photo: https://raw.githubusercontent.com/djhoomin/first-try-assets/main/street-summer.jpg
     Same shot, same framing, same camera angle. Make it winter instead of summer.
   checks:
     - kind: arg_present
@@ -48,7 +48,7 @@
   title: Change exactly one element
   axes: [constraint_compliance, outcome_quality]
   prompt: >-
-    Using https://assets.invalid/shopfront.jpg - keep everything else identical,
+    Using https://raw.githubusercontent.com/djhoomin/first-try-assets/main/shopfront.jpg - keep everything else identical,
     change only the blue fascia sign that currently reads 'eten & drinken' so
     that it reads 'GESLOTEN' instead.
   note: >-
@@ -142,8 +142,8 @@
   title: Try-on routing
   axes: [tool_selection, first_call_validity]
   prompt: >-
-    I've got a photo of a person: https://assets.invalid/person.jpg
-    and a photo of a jacket: https://assets.invalid/jacket.jpg
+    I've got a photo of a person: https://raw.githubusercontent.com/djhoomin/first-try-assets/main/person.jpg
+    and a photo of a jacket: https://raw.githubusercontent.com/djhoomin/first-try-assets/main/jacket.jpg
     Put the jacket on him.
   checks:
     - kind: first_tool_is
@@ -211,8 +211,8 @@
   axes: [recovery, first_call_validity]
   prompt: >-
     Use the vto model to put these sunglasses
-    (https://assets.invalid/sunglasses.jpg) on him
-    (https://assets.invalid/person.jpg).
+    (https://raw.githubusercontent.com/djhoomin/first-try-assets/main/sunglasses.jpg) on him
+    (https://raw.githubusercontent.com/djhoomin/first-try-assets/main/person.jpg).
   note: >-
     BFL document this failure in prose. The question is whether the error message
     does the same work at the point of failure.
@@ -229,9 +229,9 @@
   axes: [recovery, discoverability]
   prompt: >-
     Blend these five reference images into one composition:
-    https://assets.invalid/ref1.jpg https://assets.invalid/ref2.jpg
-    https://assets.invalid/ref3.jpg https://assets.invalid/ref4.jpg
-    https://assets.invalid/ref5.jpg
+    https://raw.githubusercontent.com/djhoomin/first-try-assets/main/ref1.jpg https://raw.githubusercontent.com/djhoomin/first-try-assets/main/ref2.jpg
+    https://raw.githubusercontent.com/djhoomin/first-try-assets/main/ref3.jpg https://raw.githubusercontent.com/djhoomin/first-try-assets/main/ref4.jpg
+    https://raw.githubusercontent.com/djhoomin/first-try-assets/main/ref5.jpg
   note: >-
     Silent truncation to four would be the most serious finding in the suite,
     because the user gets a plausible wrong answer with no error.
