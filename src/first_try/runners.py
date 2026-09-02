@@ -35,15 +35,64 @@ class Runner(Protocol):
 
 
 class ClaudeRunner:
-    """Anthropic SDK. Adaptive thinking on, because that is how it ships."""
+    """Anthropic SDK. Adaptive thinking on, because that is how it ships.
 
-    def __init__(self, model: str = "claude-opus-5", max_tokens: int = 8192) -> None:
+    Caches aggressively, for a reason that is not only thrift. The system prompt
+    and the server's tool schemas are byte-identical on every turn of every task
+    in a run, and a task's own conversation grows monotonically. Without caching,
+    an agent that reads a long skill guide on turn one pays for that guide again
+    on every later turn, and the suite's cost scales with the square of how
+    thorough the agent is. Measuring cost discipline while being profligate
+    about it would be a poor look.
+    """
+
+    def __init__(self, model: str = "claude-sonnet-5", max_tokens: int = 8192,
+                 cache: bool = True) -> None:
         import anthropic
 
         self.name = f"claude:{model}"
         self.model = model
         self.max_tokens = max_tokens
+        self.cache = cache
         self.client = anthropic.Anthropic()
+        self.usage: dict[str, int] = {
+            "input_tokens": 0, "output_tokens": 0,
+            "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
+        }
+
+    def _system(self):
+        block: dict[str, Any] = {"type": "text", "text": SYSTEM_PROMPT}
+        if self.cache:
+            block["cache_control"] = {"type": "ephemeral"}
+        return [block]
+
+    def _tools(self, tools):
+        defs = to_anthropic_tools(tools)
+        if self.cache and defs:
+            # Marking the last definition caches the whole tool block, which is
+            # identical across every task in the run.
+            defs[-1] = {**defs[-1], "cache_control": {"type": "ephemeral"}}
+        return defs
+
+    def _mark_conversation(self, messages: list[dict[str, Any]]) -> None:
+        """Cache the conversation prefix, so each turn only pays for what is new."""
+        if not self.cache or not messages:
+            return
+        for message in messages:
+            content = message.get("content")
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict):
+                        block.pop("cache_control", None)
+        last = messages[-1]
+        content = last.get("content")
+        if isinstance(content, list) and content and isinstance(content[-1], dict):
+            content[-1]["cache_control"] = {"type": "ephemeral"}
+
+    def _record(self, response) -> None:
+        usage = getattr(response, "usage", None)
+        for key in self.usage:
+            self.usage[key] += getattr(usage, key, 0) or 0
 
     def run(self, *, prompt, setup, tools, invoke, max_turns):
         messages: list[dict[str, Any]] = [
@@ -53,14 +102,16 @@ class ClaudeRunner:
         final_text, turn = "", 0
 
         for turn in range(1, max_turns + 1):
+            self._mark_conversation(messages)
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
-                system=SYSTEM_PROMPT,
-                tools=to_anthropic_tools(tools),
+                system=self._system(),
+                tools=self._tools(tools),
                 messages=messages,
                 thinking={"type": "adaptive"},
             )
+            self._record(response)
             messages.append({"role": "assistant", "content": response.content})
             uses = [b for b in response.content if getattr(b, "type", "") == "tool_use"]
             if not uses:

@@ -51,6 +51,8 @@ class Transcript:
     final_text: str = ""
     turns: int = 0
     stopped_early: str = ""        # why the loop ended, if not naturally
+    #: Tokens the runner spent on this task, including cache traffic.
+    usage: dict = field(default_factory=dict)
 
     # --- derived views the checks and the report both read -----------------
 

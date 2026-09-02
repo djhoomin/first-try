@@ -41,6 +41,28 @@ def render_report(rows: list[dict[str, Any]]) -> str:
         )
     out.append("")
 
+    totals: dict[str, int] = defaultdict(int)
+    for row in rows:
+        for key, value in (row.get("usage") or {}).items():
+            totals[key] += value or 0
+    if totals:
+        fresh = totals["input_tokens"] + totals["cache_creation_input_tokens"]
+        reads = totals["cache_read_input_tokens"]
+        served = fresh + reads
+        hit = 100.0 * reads / served if served else 0.0
+        out += [
+            "",
+            "### What this run cost to perform",
+            "",
+            f"- input {fresh:,} fresh + {reads:,} from cache ({hit:.0f}% served from cache), "
+            f"output {totals['output_tokens']:,}",
+            "",
+            "Cached reads bill at a fraction of fresh input, so the hit rate is most of what",
+            "the suite costs. It drops when the tool schemas change between runs, and when an",
+            "agent reads a long skill guide that then rides along in every later turn.",
+            "",
+        ]
+
     axis_totals: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     for row in rows:
         for axis in row["axes"]:

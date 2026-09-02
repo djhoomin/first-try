@@ -28,6 +28,7 @@ def run_task(task: Task, runner: Any, session: Any, tools: list[dict], policy: P
     def invoke(name: str, args: dict[str, Any], turn: int) -> Any:
         return interceptor.call(name, args, turn=turn)
 
+    before = dict(getattr(runner, "usage", {}) or {})
     try:
         final_text, turns, messages = runner.run(
             prompt=task.prompt, setup=task.setup, tools=tools,
@@ -40,6 +41,9 @@ def run_task(task: Task, runner: Any, session: Any, tools: list[dict], policy: P
         # A runner blowing up is a result, not a crash. Record and move on so
         # one bad task cannot cost you a whole paid run.
         transcript.stopped_early = f"{type(exc).__name__}: {exc}"
+
+    after = dict(getattr(runner, "usage", {}) or {})
+    transcript.usage = {k: after.get(k, 0) - before.get(k, 0) for k in after}
 
     results = run_checks(transcript, task.checks)
     if transcript.stopped_early:
@@ -66,6 +70,7 @@ def run_task(task: Task, runner: Any, session: Any, tools: list[dict], policy: P
         "intended_usd": transcript.intended_usd,
         "first_tool": transcript.first_tool,
         "resource_mode": resource_mode,
+        "usage": transcript.usage,
         "note": task.note,
         "stopped_early": transcript.stopped_early,
         "skipped": [r.kind for r in results if r.skipped],

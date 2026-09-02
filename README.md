@@ -63,6 +63,23 @@ first-try run --resume             # skip tasks already recorded
 first-try review                   # contact sheet for the judgement calls
 ```
 
+## What the suite costs to run
+
+Two bills, and they are easy to confuse. The **image API** bill is what the
+report measures. The **model** bill is what it costs to drive the agent, and it
+is usually the larger of the two.
+
+The runner caches the system prompt, the tool schemas and the growing
+conversation prefix. Without that, an agent that reads a long skill guide on
+turn one pays for it again on every later turn, and the cost of the suite scales
+with how thorough the agent is. The report prints the cache hit rate; if it is
+low, something is invalidating the prefix.
+
+The default runner is `claude-sonnet-5`. A frontier model is not obviously the
+right subject anyway: the interesting question is whether a *typical* agent gets
+the platform right, not whether the most capable one can. Use `--model` to
+compare, and expect a larger model to cost several times more per task.
+
 ## Judging the rest
 
 Roughly half the suite ends in a question no assertion can answer: did the style

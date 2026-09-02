@@ -23,7 +23,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--tasks", default="tasks", help="task file or directory")
     run.add_argument("--only", default="", help="comma-separated task ids")
     run.add_argument("--runner", default="claude", choices=["claude", "openai"])
-    run.add_argument("--model", default="")
+    run.add_argument("--model", default="",
+                     help="default claude-sonnet-5; opus costs several times more per task")
+    run.add_argument("--no-cache", action="store_true",
+                     help="disable prompt caching (slower and much more expensive)")
     run.add_argument("--base-url", default="")
     run.add_argument("--stdio", default="", help='server command, e.g. "npx -y flux-mcp"')
     run.add_argument("--http", default="", help="server URL")
@@ -57,7 +60,8 @@ def _make_runner(args):
     try:
         if args.runner == "claude":
             from .runners import ClaudeRunner
-            return ClaudeRunner(model=args.model or "claude-opus-5")
+            return ClaudeRunner(model=args.model or "claude-sonnet-5",
+                                cache=not args.no_cache)
         from .runners import OpenAICompatRunner
         if not args.model:
             sys.exit("--model is required for the openai runner")
