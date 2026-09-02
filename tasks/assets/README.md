@@ -16,7 +16,7 @@ that anyone can reproduce a run.
 | `person.jpg` | T08, T13 | One person, upper body, plain background, simple clothing |
 | `jacket.jpg` | T08 | A jacket **on its own**, product shot, nobody wearing it |
 | `sunglasses.jpg` | T13 | Sunglasses on their own, product shot |
-| `ref1.jpg` .. `ref5.jpg` | T14 | Five images **distinguishable at a glance from each other** |
+| `ref1.jpg` .. `ref5.jpg` | T14 | Five photo-realistic shots of **deliberately arbitrary objects**, one unmistakable marker each |
 
 ## Why each property matters
 
@@ -39,16 +39,38 @@ detail around it matters too: without it, "everything else identical" has nothin
 to be checked against.
 
 **T14, the five references.** This is the one that will be got wrong. The task
-exists to detect **silent truncation to four**, so the five images have to be
-distinguishable at a glance in the output. Five similar landscapes make the
-finding undetectable. Give each one an unmistakable element, ideally a distinct
-dominant colour or an obviously different object, so that "were all five used"
-is answerable by looking rather than by argument.
+exists to detect **silent truncation to four**, so what you need is not
+distinctiveness in general but *attribution*: after the blend, you have to be
+able to say "that came from ref3" with nobody able to argue.
+
+Ordinary photographs fail this. If ref3 is a red bicycle and a bicycle appears in
+the output, you cannot separate "the model used ref3" from "the model drew a
+bicycle because bicycles suit the scene", and the finding becomes invisible.
+
+The property that fixes it is **arbitrariness**, not medium. Each reference needs
+a marker the model would not plausibly invent unprompted. Photo-realistic product
+shots of deliberately odd objects give you both a realistic medium and unambiguous
+attribution:
+
+1. A matte teal enamel teapot with a brass hexagonal handle
+2. A fluorescent orange rotary telephone
+3. A carved wooden owl with mismatched glass eyes, one green and one amber
+4. A tall thermos striped in candy pink and black
+5. A brass diving helmet with a cracked porthole
+
+Five distinct dominant colours, five one-phrase descriptions, five things nothing
+else would produce. Generate them.
+
+This is an instrumented fixture rather than a representative one, and real users
+blend brand assets and mood boards rather than novelty objects. Say that in the
+writeup. Accepting artificiality to make a specific failure mode visible is a
+normal methodological trade, and stating it plainly is what separates a benchmark
+from a demo.
 
 ## Generate rather than source, for four of them
 
-`person.jpg`, `jacket.jpg`, `sunglasses.jpg` and `style-reference.jpg` are better
-generated with FLUX than downloaded.
+`person.jpg`, `jacket.jpg`, `sunglasses.jpg`, `style-reference.jpg` and all five
+T14 references are better generated with FLUX than downloaded.
 
 - **No likeness question.** Publishing virtual try-on results performed on a real
   person's photograph is a consent question you do not need to have. A generated
