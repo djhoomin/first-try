@@ -37,18 +37,23 @@ scores the suite, because what is being measured is the call the agent chose to
 make.
 
 ```bash
-first-try run --stdio "npx -y flux-mcp" --dry-run
+first-try run --stdio "npx -y mcp-remote https://mcp.bfl.ai" --dry-run
 ```
 
 Then a live run with a ceiling:
 
 ```bash
-first-try run --stdio "npx -y flux-mcp" --budget 5.00 --per-call-cap 1.00
+first-try run --stdio "npx -y mcp-remote https://mcp.bfl.ai" --budget 5.00 --per-call-cap 1.00
 ```
 
-`--stdio` is the practical path: running the open-source server locally with an
-API key avoids the interactive OAuth flow a hosted endpoint needs. `--http` is
-there for hosted servers, with `--header` for your own auth.
+The FLUX server is hosted and OAuth-only, so there is nothing to run locally.
+[`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridges it to stdio,
+opens a browser for sign-in on first use, and caches tokens in `~/.mcp-auth`.
+You will need a BFL account with credits; every call is billed to the
+organisation you pick during sign-in, which is why the dry run comes first.
+
+`--http` is there for servers that accept static credentials, with `--header`
+for your own auth.
 
 ```bash
 first-try tasks                    # list the suite

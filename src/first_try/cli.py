@@ -49,6 +49,47 @@ def _make_runner(args):
     return OpenAICompatRunner(model=args.model, base_url=args.base_url or None)
 
 
+def connection_help(args, exc: Exception) -> str:
+    """Say what went wrong and what to try, rather than unwinding a stack.
+
+    A benchmark that measures whether error messages let you recover has no
+    business emitting a traceback when its own connection fails.
+    """
+    target = args.stdio or args.http
+    lines = [
+        "",
+        f"Could not connect to the MCP server: {type(exc).__name__}: {exc}",
+        f"  tried: {target}",
+        "",
+    ]
+    if args.stdio:
+        lines += [
+            "The server command exited instead of speaking MCP. Usually one of:",
+            "",
+            "  - the package does not exist. Check the name is real before assuming",
+            "    the transport is broken; npm prints its own 404 above this message.",
+            "  - the server is hosted only, with no local package to run. Many are.",
+            "    Bridge to it over stdio instead:",
+            "",
+            '      --stdio "npx -y mcp-remote https://<the server>"',
+            "",
+            "  - it needs credentials in the environment and quit without them.",
+            "",
+            "For FLUX specifically, the server is hosted and OAuth-only:",
+            "",
+            '  first-try run --stdio "npx -y mcp-remote https://mcp.bfl.ai" --dry-run',
+            "",
+            "A browser opens for sign-in on first use; tokens cache in ~/.mcp-auth.",
+        ]
+    else:
+        lines += [
+            "Check the URL, and whether the server needs auth headers (--header),",
+            "or an OAuth flow this client does not perform. If it is OAuth-only,",
+            'bridge over stdio: --stdio "npx -y mcp-remote <url>"',
+        ]
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -74,12 +115,16 @@ def main(argv: list[str] | None = None) -> int:
         sys.exit("supply --stdio or --http to say which server to benchmark")
 
     session = McpSession()
-    if args.stdio:
-        parts = args.stdio.split()
-        session.connect_stdio(parts[0], parts[1:])
-    else:
-        headers = dict(h.split(":", 1) for h in args.header)
-        session.connect_http(args.http, {k: v.strip() for k, v in headers.items()})
+    try:
+        if args.stdio:
+            parts = args.stdio.split()
+            session.connect_stdio(parts[0], parts[1:])
+        else:
+            headers = dict(h.split(":", 1) for h in args.header)
+            session.connect_http(args.http, {k: v.strip() for k, v in headers.items()})
+    except Exception as exc:
+        session.close()
+        sys.exit(connection_help(args, exc))
 
     policy = Policy(dry_run=args.dry_run, budget_usd=args.budget, per_call_cap_usd=args.per_call_cap)
     runner = _make_runner(args)

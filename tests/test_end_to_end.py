@@ -113,3 +113,18 @@ def test_failure_outranks_pending_review_in_the_report():
     text = render_report(serialisable)
     line = next(l for l in text.splitlines() if l.startswith("| T05 "))
     assert "fail" in line and "review" not in line
+
+
+def test_connection_failure_explains_itself():
+    """The harness must not emit a traceback when its own connection fails."""
+    from argparse import Namespace
+
+    from first_try.cli import connection_help
+
+    text = connection_help(
+        Namespace(stdio="npx -y nonexistent-mcp", http=""),
+        RuntimeError("Connection closed"),
+    )
+    assert "Could not connect" in text
+    assert "mcp-remote" in text          # points at the route that works
+    assert "Traceback" not in text
