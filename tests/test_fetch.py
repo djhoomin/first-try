@@ -42,3 +42,43 @@ def test_harvest_ignores_items_with_no_media():
 
 def test_harvest_survives_junk():
     assert harvest(None) == [] and harvest("a string") == [] and harvest(42) == []
+
+
+def test_signed_urls_keep_their_query_string():
+    """Media URLs are signed. Truncating at the extension yields a 400."""
+    from first_try.mcp_client import image_urls
+
+    signed = ("https://app.bfl.ai/storage/v1/object/sign/bfl-mcp/abc/generations/"
+              "def.jpg?token=eyJraWQiOiJiM2Q3NDVmMy0zNjNj.sig-_123")
+    assert image_urls({"result": {"sample": signed}}) == [signed]
+
+
+def test_unsigned_urls_still_match():
+    from first_try.mcp_client import image_urls
+
+    assert image_urls({"u": "https://cdn.test/a.png"}) == ["https://cdn.test/a.png"]
+
+
+def test_a_trailing_quote_or_paren_is_not_part_of_the_url():
+    from first_try.mcp_client import image_urls
+
+    blob = 'see ![](https://cdn.test/a.png?token=xyz) and "https://cdn.test/b.jpg?t=1"'
+    assert image_urls(blob) == ["https://cdn.test/a.png?token=xyz", "https://cdn.test/b.jpg?t=1"]
+
+
+def test_review_prefers_the_local_copy_over_the_signed_url():
+    """Signatures expire; the findings outlive them."""
+    from first_try.review import render_review
+
+    rows = [{"task_id": "T01", "title": "t", "needs_review": True, "errored": False,
+             "checks": [{"kind": "manual", "passed": False, "detail": "needs review: look at it",
+                         "skipped": False}],
+             "intended_usd": 0.03, "turns": 2}]
+    transcripts = {"T01": {"task_id": "T01", "calls": [
+        {"name": "generate_image", "est_usd": 0.03, "args": {"requests": [{"prompt": "p"}]},
+         "result_urls": ["https://app.bfl.ai/signed.jpg?token=abc"],
+         "result_files": ["media/deadbeef.jpg"]}
+    ]}}
+    page = render_review(rows, transcripts)
+    assert "media/deadbeef.jpg" in page
+    assert "signed.jpg" not in page

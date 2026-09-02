@@ -332,7 +332,12 @@ class SessionWithResources:
         self.session.close()
 
 
-_URL = __import__("re").compile(r"https?://[^\s\"'<>\\)]+\.(?:png|jpe?g|webp|gif|mp4|webm)", __import__("re").I)
+# Media URLs are commonly signed, and the signature lives in the query
+# string. Stopping at the file extension yields a URL that 400s.
+_URL = __import__("re").compile(
+    r"https?://[^\s\"'<>\\)]+\.(?:png|jpe?g|webp|gif|mp4|webm)(?:\?[^\s\"'<>\\)]*)?",
+    __import__("re").I,
+)
 
 
 def image_urls(result: Any) -> list[str]:

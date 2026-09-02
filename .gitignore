@@ -3,3 +3,5 @@ __pycache__/
 *.egg-info/
 results/
 .pytest_cache/
+results/media/
+results/history-raw.json

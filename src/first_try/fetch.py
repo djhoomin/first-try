@@ -20,7 +20,7 @@ import re
 
 from .mcp_client import image_urls, request_ids
 
-__all__ = ["fetch_outputs", "harvest", "normalise"]
+__all__ = ["fetch_outputs", "harvest", "normalise", "download_media"]
 
 #: Tools that can turn a job id into a finished result, best first. get_result
 #: is referenced in BFL's docs but absent from their published tool table, so
@@ -28,7 +28,7 @@ __all__ = ["fetch_outputs", "harvest", "normalise"]
 RESOLVERS = ("get_result", "get_history")
 
 
-def fetch_outputs(out_dir: Path, session: Any, log=print) -> int:
+def fetch_outputs(out_dir: Path, session: Any, log=print, force: bool = False) -> int:
     """Fill in result_urls across saved transcripts. Returns how many resolved."""
     available = {t["name"] for t in session.list_tools()}
     resolver = next((name for name in RESOLVERS if name in available), None)
@@ -41,7 +41,9 @@ def fetch_outputs(out_dir: Path, session: Any, log=print) -> int:
         data = json.loads(path.read_text(encoding="utf-8"))
         changed = False
         for call in data.get("calls", []):
-            if call.get("result_urls") or call.get("blocked") or call.get("failed"):
+            if call.get("blocked") or call.get("failed"):
+                continue
+            if call.get("result_urls") and not force:
                 continue
             ids = call.get("result_request_ids") or request_ids(call.get("result_summary") or "")
             for rid in ids:
@@ -72,7 +74,7 @@ def fetch_outputs(out_dir: Path, session: Any, log=print) -> int:
             path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
     if resolved == 0:
         log("no job ids on record; falling back to matching account history by prompt")
-        resolved = backfill_from_history(out_dir, session, log=log)
+        resolved = backfill_from_history(out_dir, session, log=log, force=force)
     return resolved
 
 
@@ -109,7 +111,7 @@ def harvest(obj: Any, _out: list | None = None) -> list[dict]:
     return out
 
 
-def backfill_from_history(out_dir: Path, session: Any, log=print) -> int:
+def backfill_from_history(out_dir: Path, session: Any, log=print, force: bool = False) -> int:
     """Match saved calls to account history by prompt, for runs that predate
     request-id capture or whose ids were lost to a truncated summary."""
     pages, cursor = [], None
@@ -156,8 +158,12 @@ def backfill_from_history(out_dir: Path, session: Any, log=print) -> int:
         data = json.loads(path.read_text(encoding="utf-8"))
         changed = False
         for call in data.get("calls", []):
-            if call.get("result_urls") or call.get("blocked") or call.get("failed"):
+            if call.get("blocked") or call.get("failed"):
                 continue
+            if call.get("result_urls") and not force:
+                continue
+            if force:
+                call["result_urls"] = []
             requests = call.get("args", {}).get("requests") or [call.get("args", {})]
             for req in requests:
                 hit = by_prompt.get(normalise(req.get("prompt", "")))
@@ -172,3 +178,48 @@ def backfill_from_history(out_dir: Path, session: Any, log=print) -> int:
         if changed:
             path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
     return filled
+
+
+# --- keeping the images ----------------------------------------------------
+
+
+def download_media(out_dir: Path, log=print, timeout: float = 60.0) -> int:
+    """Save every referenced image beside the results.
+
+    Delivery URLs are signed and expire, so a review page built from remote
+    URLs stops working at some unannounced point. The findings outlive the
+    signatures, so the files come local and the page points at those.
+    """
+    import hashlib
+    import urllib.request
+
+    media = out_dir / "media"
+    media.mkdir(exist_ok=True)
+    saved = 0
+    for path in sorted(out_dir.glob("transcript-*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        changed = False
+        for call in data.get("calls", []):
+            files = call.setdefault("result_files", [])
+            for url in call.get("result_urls") or []:
+                stem = hashlib.sha1(url.encode()).hexdigest()[:16]
+                suffix = re.sub(r"\?.*$", "", url).rsplit(".", 1)[-1].lower()[:4] or "jpg"
+                name = f"{stem}.{suffix}"
+                target = media / name
+                rel = f"media/{name}"
+                if target.exists():
+                    if rel not in files:
+                        files.append(rel)
+                        changed = True
+                    continue
+                try:
+                    with urllib.request.urlopen(url, timeout=timeout) as response:
+                        target.write_bytes(response.read())
+                except Exception as exc:
+                    log(f"  could not save {url[:70]}...: {type(exc).__name__}: {exc}")
+                    continue
+                files.append(rel)
+                changed, saved = True, saved + 1
+        if changed:
+            path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+    return saved

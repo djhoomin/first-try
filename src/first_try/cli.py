@@ -10,7 +10,7 @@ from pathlib import Path
 from .interceptor import Policy
 from .mcp_client import McpSession, ResourceTools, SessionWithResources
 from .report import render_report
-from .fetch import fetch_outputs
+from .fetch import download_media, fetch_outputs
 from .review import render_review
 from .runner_loop import run_suite
 from .tasks import load_tasks
@@ -54,6 +54,10 @@ def build_parser() -> argparse.ArgumentParser:
     fet.add_argument("--stdio", default="")
     fet.add_argument("--http", default="")
     fet.add_argument("--header", action="append", default=[])
+    fet.add_argument("--force", action="store_true",
+                     help="re-resolve calls that already have media recorded")
+    fet.add_argument("--no-download", action="store_true",
+                     help="keep remote URLs only; they are signed and will expire")
 
     rev = sub.add_parser("review", help="build a contact sheet for the outstanding judgement calls")
     rev.add_argument("--out", default="results")
@@ -142,8 +146,12 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 headers = dict(h.split(":", 1) for h in args.header)
                 session.connect_http(args.http, {k: v.strip() for k, v in headers.items()})
-            n = fetch_outputs(Path(args.out), session, log=lambda m: print(m, file=sys.stderr))
+            log = lambda m: print(m, file=sys.stderr)
+            n = fetch_outputs(Path(args.out), session, log=log, force=args.force)
             print(f"resolved media for {n} job(s)")
+            if not args.no_download:
+                saved = download_media(Path(args.out), log=log)
+                print(f"saved {saved} file(s) to {Path(args.out) / 'media'}")
         finally:
             session.close()
         return 0

@@ -77,7 +77,8 @@ def render_review(rows: list[dict[str, Any]], transcripts: dict[str, dict]) -> s
         billable = _calls_of(t)
         urls: list[str] = []
         for call in billable:
-            for u in call.get("result_urls") or []:
+            # Local copies first: delivery URLs are signed and expire.
+            for u in (call.get("result_files") or call.get("result_urls") or []):
                 if u not in urls:
                     urls.append(u)
 
