@@ -1,0 +1,255 @@
+# first-try suite v1.
+#
+# Replace every https://assets.invalid/... URL with your own royalty-free image
+# before running. Nothing here should reference material you do not own.
+
+- id: T01
+  title: Style match, new subject
+  axes: [tool_selection, constraint_compliance, outcome_quality]
+  prompt: >-
+    Here's a reference image from our art style guide:
+    https://assets.invalid/style-reference.jpg
+    Generate a market stall in that style. The style needs to match what's in
+    the reference, the subject is new.
+  checks:
+    - kind: first_tool_is
+      value: generate_image
+    - kind: arg_present
+      tool: generate_image
+      path: requests[*].input_image
+    - kind: spend_at_most
+      value: 0.10
+    - kind: manual
+      note: does the output actually carry the reference style, or only the prompt words
+
+- id: T02
+  title: Composition preserved, content changed
+  axes: [constraint_compliance, outcome_quality]
+  prompt: >-
+    Here is a photo: https://assets.invalid/street-summer.jpg
+    Same shot, same framing, same camera angle. Make it winter instead of summer.
+  checks:
+    - kind: arg_present
+      tool: generate_image
+      path: requests[*].input_image
+    - kind: arg_matches
+      tool: generate_image
+      path: requests[*].prompt
+      value: "same|unchanged|keep|preserve|identical"
+    - kind: spend_at_most
+      value: 0.10
+    - kind: manual
+      note: is the composition actually preserved
+
+- id: T03
+  title: Change exactly one element
+  axes: [constraint_compliance, outcome_quality]
+  prompt: >-
+    Using https://assets.invalid/shopfront.jpg - keep everything else identical,
+    change only the sign above the door so it reads 'GESLOTEN'.
+  note: >-
+    Two documented rules pull against each other: edits want continuity, readable
+    text wants flux2_flex. Either choice is reportable; the reasoning is the point.
+  checks:
+    - kind: arg_present
+      tool: generate_image
+      path: requests[*].input_image
+    - kind: arg_matches
+      tool: generate_image
+      path: requests[*].prompt
+      value: "['\"]GESLOTEN['\"]"
+    - kind: spend_at_most
+      value: 0.10
+    - kind: manual
+      note: did anything other than the sign change
+
+- id: T04
+  title: Iterate rather than regenerate
+  axes: [tool_selection, cost_discipline]
+  setup:
+    - role: user
+      content: Generate four options for a misty pine forest at dawn.
+    - role: assistant
+      content: >-
+        I generated four options. Their request ids are req-a1, req-a2, req-a3
+        and req-a4.
+  prompt: The third one is closest. Give me four more in that direction.
+  checks:
+    - kind: called_tool
+      value: generate_variations
+    - kind: never_called_tool
+      value: generate_image
+    - kind: arg_matches
+      tool: generate_variations
+      path: request_id
+      value: "req-a3"
+    - kind: spend_at_most
+      value: 0.15
+
+- id: T05
+  title: Typography
+  axes: [constraint_compliance, outcome_quality]
+  prompt: >-
+    Make a poster for a night market. The words 'NIGHT MARKET' and 'Fridays 6pm'
+    have to be readable and spelled correctly.
+  checks:
+    - kind: arg_equals
+      tool: generate_image
+      path: requests[*].model
+      value: flux2_flex
+    - kind: arg_matches
+      tool: generate_image
+      path: requests[*].prompt
+      value: "['\"]NIGHT MARKET['\"]"
+    - kind: spend_at_most
+      value: 0.10
+    - kind: manual
+      note: is the rendered text correct
+
+- id: T06
+  title: Cheap and disposable
+  axes: [cost_discipline]
+  prompt: >-
+    I need about 20 background thumbnails just to pick a direction. Cheap and
+    fast is fine, quality doesn't matter yet.
+  checks:
+    - kind: arg_in
+      tool: generate_image
+      path: requests[*].model
+      value: [flux2_klein_4b, flux2_klein_9b_preview]
+    - kind: spend_at_most
+      value: 0.35
+
+- id: T07
+  title: Trade up
+  axes: [constraint_compliance]
+  prompt: >-
+    Generate a hero image of a copper kettle on a slate worktop. This one is
+    going on the homepage, make it as good as it can be.
+  checks:
+    - kind: arg_equals
+      tool: generate_image
+      path: requests[*].model
+      value: flux2_max
+    - kind: spend_at_most
+      value: 0.15
+
+- id: T08
+  title: Try-on routing
+  axes: [tool_selection, first_call_validity]
+  prompt: >-
+    I've got a photo of a person: https://assets.invalid/person.jpg
+    and a photo of a jacket: https://assets.invalid/jacket.jpg
+    Put the jacket on her.
+  checks:
+    - kind: first_tool_is
+      value: vto
+    - kind: never_called_tool
+      value: generate_image
+    - kind: spend_at_most
+      value: 0.10
+
+- id: T09
+  title: Capability discovery without docs
+  axes: [discoverability, first_call_validity]
+  prompt: What can you actually do with images here, and what will it cost me?
+  note: Free task. Run it first; it costs nothing and catches hallucinated model names.
+  checks:
+    - kind: no_generation
+    - kind: called_tool
+      value: get_credits
+    - kind: manual
+      note: are the model names and prices in the answer real
+
+- id: T10
+  title: Draft when iterating
+  axes: [cost_discipline]
+  per_call_cap_usd: 1.50
+  prompt: >-
+    I'm still working out the motion for a 15-second clip, a drone rising over a
+    harbour. Let me see roughly what it looks like.
+  checks:
+    - kind: called_tool
+      value: generate_video
+    - kind: arg_equals
+      tool: generate_video
+      path: draft
+      value: true
+    - kind: spend_at_most
+      value: 1.00
+
+- id: T11
+  title: The twenty-three dollar call
+  axes: [cost_discipline]
+  force_dry_run: true
+  prompt: >-
+    Give me four different 20-second versions of a neon city flythrough, the
+    highest quality you can.
+  note: >-
+    Never executes. The recorded intent is the finding: four 20s fhd clips is
+    $23.20, inside the documented envelope, with no confirmation step.
+  checks:
+    - kind: spend_at_most
+      value: 5.00
+    - kind: manual
+      note: did the agent mention the cost, or offer a draft, before committing
+
+- id: T12
+  title: Guessing costs money
+  axes: [cost_discipline, recovery]
+  prompt: Make me something for the launch.
+  checks:
+    - kind: asks_a_question
+    - kind: no_generation
+
+- id: T13
+  title: Invalid model, documented case
+  axes: [recovery, first_call_validity]
+  prompt: >-
+    Use the vto model to put these sunglasses
+    (https://assets.invalid/sunglasses.jpg) on him
+    (https://assets.invalid/person.jpg).
+  note: >-
+    BFL document this failure in prose. The question is whether the error message
+    does the same work at the point of failure.
+  checks:
+    - kind: called_tool
+      value: vto
+    - kind: turns_to_success_at_most
+      value: 3
+    - kind: manual
+      note: did the error name the vto tool, or only reject the value
+
+- id: T14
+  title: Reference-image limit
+  axes: [recovery, discoverability]
+  prompt: >-
+    Blend these five reference images into one composition:
+    https://assets.invalid/ref1.jpg https://assets.invalid/ref2.jpg
+    https://assets.invalid/ref3.jpg https://assets.invalid/ref4.jpg
+    https://assets.invalid/ref5.jpg
+  note: >-
+    Silent truncation to four would be the most serious finding in the suite,
+    because the user gets a plausible wrong answer with no error.
+  checks:
+    - kind: turns_to_success_at_most
+      value: 3
+    - kind: spend_at_most
+      value: 0.20
+    - kind: manual
+      note: were all five references used, or was one silently dropped
+
+- id: T15
+  title: Negative prompts
+  axes: [constraint_compliance, outcome_quality]
+  prompt: A quiet street scene. No cars, no people, no signage.
+  note: Fix lives in the skills repo or a tool description, not in code. Best PR target.
+  checks:
+    - kind: arg_not_matches
+      tool: generate_image
+      path: requests[*].prompt
+      value: "\\bno (cars|people|signage)\\b"
+    - kind: spend_at_most
+      value: 0.10
+    - kind: manual
+      note: does the image contain cars, people or signage
