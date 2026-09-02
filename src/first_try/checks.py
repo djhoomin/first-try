@@ -137,6 +137,8 @@ def arg_present(t: Transcript, spec: dict) -> CheckResult:
 
 def arg_absent(t: Transcript, spec: dict) -> CheckResult:
     tool, path = spec.get("tool"), spec["path"]
+    if tool and tool not in t.tool_names:
+        return CheckResult("arg_absent", False, f"{tool} was never called, so there is nothing to check", skipped=True)
     values = [v for c in _calls_named(t, tool) for v in resolve(c.args, path) if v]
     return CheckResult("arg_absent", not values, f"{path} {'was set to ' + str(values) if values else 'was absent'}")
 
@@ -151,7 +153,15 @@ def arg_matches(t: Transcript, spec: dict) -> CheckResult:
 
 
 def arg_not_matches(t: Transcript, spec: dict) -> CheckResult:
+    """A negative assertion is vacuously true when nothing was called.
+
+    Without this guard a task in which the agent did nothing at all passes,
+    which quietly inflates the score with non-events.
+    """
     tool, path, pattern = spec.get("tool"), spec["path"], spec["value"]
+    if tool and tool not in t.tool_names:
+        return CheckResult("arg_not_matches", False,
+                           f"{tool} was never called, so there is nothing to check", skipped=True)
     rx = re.compile(pattern, re.IGNORECASE)
     values = [str(v) for c in _calls_named(t, tool) for v in resolve(c.args, path)]
     hits = [v for v in values if rx.search(v)]

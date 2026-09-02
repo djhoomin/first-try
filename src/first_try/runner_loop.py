@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .checks import run_checks
+from .checks import CheckResult, run_checks
 from .mcp_client import McpTimeout
 from .interceptor import Interceptor, Policy
 from .tasks import Task
@@ -42,6 +42,14 @@ def run_task(task: Task, runner: Any, session: Any, tools: list[dict], policy: P
         transcript.stopped_early = f"{type(exc).__name__}: {exc}"
 
     results = run_checks(transcript, task.checks)
+    if transcript.stopped_early:
+        # The run did not happen. Scoring it would grade the harness, the API
+        # key or the network, and several checks pass vacuously on an empty
+        # record, so an errored task counts as neither pass nor failure.
+        results = [
+            CheckResult(r.kind, False, f"not run: {transcript.stopped_early[:120]}", skipped=True)
+            for r in results
+        ]
     needs_review = any(r.kind == "manual" and not r.skipped for r in results)
     scored = [r for r in results if r.kind != "manual" and not r.skipped]
 
@@ -50,6 +58,7 @@ def run_task(task: Task, runner: Any, session: Any, tools: list[dict], policy: P
         "title": task.title,
         "runner": runner.name,
         "axes": task.axes,
+        "errored": bool(transcript.stopped_early),
         "passed": bool(scored) and all(r.passed for r in scored),
         "needs_review": needs_review,
         "turns": transcript.turns,

@@ -231,3 +231,35 @@ def test_reconnaissance_before_generating_is_not_a_miss():
     ]})
     scored = [c for c in rows["T01"]["checks"] if not c.get("skipped") and c["kind"] != "manual"]
     assert all(c["passed"] for c in scored), [c for c in scored if not c["passed"]]
+
+
+def test_a_task_that_did_nothing_does_not_pass():
+    """T15 scored as a pass after the API refused the request.
+
+    No generate_image call happened, so the negative assertion had nothing to
+    match against and passed vacuously, and spend_at_most passed because
+    nothing was spent. A non-event must never count toward the score.
+    """
+    rows = _run({"T15"}, {"T15": [("get_skill", {"name": "flux-image-best-practices"})]})
+    row = rows["T15"]
+    assert not row["passed"]
+    assert "arg_not_matches" in row["skipped"]
+
+
+def test_an_errored_task_is_excluded_from_the_denominator():
+    from first_try.interceptor import Policy
+    from first_try.runner_loop import run_task
+    from first_try.tasks import load_tasks
+
+    class Broken:
+        name = "broken"
+
+        def run(self, **kwargs):
+            raise RuntimeError("credit balance is too low")
+
+    task = next(t for t in load_tasks("tasks") if t.id == "T15")
+    row = run_task(task, Broken(), FakeSession(), BFL_TOOLS, Policy(dry_run=True))
+    assert row["errored"] and not row["passed"]
+    text = render_report([{k: v for k, v in row.items() if k != "transcript"}])
+    assert "did not run (T15)" in text
+    assert "| ERROR " in text
