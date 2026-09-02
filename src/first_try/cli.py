@@ -40,13 +40,21 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _make_runner(args):
-    if args.runner == "claude":
-        from .runners import ClaudeRunner
-        return ClaudeRunner(model=args.model or "claude-opus-5")
-    from .runners import OpenAICompatRunner
-    if not args.model:
-        sys.exit("--model is required for the openai runner")
-    return OpenAICompatRunner(model=args.model, base_url=args.base_url or None)
+    """Build the runner. Raises SystemExit with something actionable."""
+    try:
+        if args.runner == "claude":
+            from .runners import ClaudeRunner
+            return ClaudeRunner(model=args.model or "claude-opus-5")
+        from .runners import OpenAICompatRunner
+        if not args.model:
+            sys.exit("--model is required for the openai runner")
+        return OpenAICompatRunner(model=args.model, base_url=args.base_url or None)
+    except ImportError as exc:
+        extra = "claude" if args.runner == "claude" else "openai"
+        sys.exit(
+            f"\nThe {args.runner} runner needs an SDK that is not installed: {exc}\n"
+            f'  pip install -e ".[{extra}]"\n'
+        )
 
 
 def connection_help(args, exc: Exception) -> str:
@@ -114,6 +122,12 @@ def main(argv: list[str] | None = None) -> int:
     if not args.stdio and not args.http:
         sys.exit("supply --stdio or --http to say which server to benchmark")
 
+    # Everything cheap and local is checked before anything expensive or
+    # interactive. Connecting spawns a subprocess and may open a browser for
+    # OAuth, and there is no excuse for making someone sit through that only to
+    # fail on an import that could have been checked instantly.
+    runner = _make_runner(args)
+
     session = McpSession()
     try:
         if args.stdio:
@@ -127,7 +141,6 @@ def main(argv: list[str] | None = None) -> int:
         sys.exit(connection_help(args, exc))
 
     policy = Policy(dry_run=args.dry_run, budget_usd=args.budget, per_call_cap_usd=args.per_call_cap)
-    runner = _make_runner(args)
 
     def progress(row):
         mark = "review" if row["needs_review"] else ("pass" if row["passed"] else "FAIL")

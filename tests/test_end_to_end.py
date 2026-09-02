@@ -128,3 +128,17 @@ def test_connection_failure_explains_itself():
     assert "Could not connect" in text
     assert "mcp-remote" in text          # points at the route that works
     assert "Traceback" not in text
+
+
+def test_cheap_local_checks_run_before_the_expensive_connection():
+    """A missing SDK must be caught before anything spawns a process.
+
+    Guards the ordering rather than the message: connecting can open a browser
+    for OAuth, so a preventable failure after that point costs real time.
+    """
+    import inspect
+
+    from first_try import cli
+
+    source = inspect.getsource(cli.main)
+    assert source.index("_make_runner(args)") < source.index("McpSession()")
