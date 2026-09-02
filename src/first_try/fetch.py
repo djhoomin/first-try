@@ -16,9 +16,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .mcp_client import image_urls
+import re
 
-__all__ = ["fetch_outputs"]
+from .mcp_client import image_urls, request_ids
+
+__all__ = ["fetch_outputs", "harvest", "normalise"]
 
 #: Tools that can turn a job id into a finished result, best first. get_result
 #: is referenced in BFL's docs but absent from their published tool table, so
@@ -41,7 +43,8 @@ def fetch_outputs(out_dir: Path, session: Any, log=print) -> int:
         for call in data.get("calls", []):
             if call.get("result_urls") or call.get("blocked") or call.get("failed"):
                 continue
-            for rid in call.get("result_request_ids") or []:
+            ids = call.get("result_request_ids") or request_ids(call.get("result_summary") or "")
+            for rid in ids:
                 try:
                     if resolver == "get_result":
                         result = session.call_tool("get_result", {"request_id": rid})
@@ -67,4 +70,105 @@ def fetch_outputs(out_dir: Path, session: Any, log=print) -> int:
                     log(f"  {data['task_id']} {rid[:8]}: still pending or no media")
         if changed:
             path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+    if resolved == 0:
+        log("no job ids on record; falling back to matching account history by prompt")
+        resolved = backfill_from_history(out_dir, session, log=log)
     return resolved
+
+
+# --- recovering a run whose ids were not captured --------------------------
+
+
+def normalise(text: str, length: int = 90) -> str:
+    """A stable key for matching a prompt across two representations."""
+    return re.sub(r"\s+", " ", (text or "")).strip().lower()[:length]
+
+
+def harvest(obj: Any, _out: list | None = None) -> list[dict]:
+    """Pull (prompt, urls, request_id) triples out of an unknown JSON shape.
+
+    Servers describe their history differently and this has to work without a
+    per-server adapter, so it walks the whole structure looking for objects
+    that carry both a prompt and something that looks like output media.
+    """
+    out = [] if _out is None else _out
+    if isinstance(obj, dict):
+        prompt = obj.get("prompt")
+        urls = image_urls(obj)
+        if isinstance(prompt, str) and urls:
+            out.append({
+                "prompt": prompt,
+                "urls": urls,
+                "request_id": obj.get("request_id") or obj.get("id") or "",
+            })
+        for value in obj.values():
+            harvest(value, out)
+    elif isinstance(obj, list):
+        for item in obj:
+            harvest(item, out)
+    return out
+
+
+def backfill_from_history(out_dir: Path, session: Any, log=print) -> int:
+    """Match saved calls to account history by prompt, for runs that predate
+    request-id capture or whose ids were lost to a truncated summary."""
+    pages, cursor = [], None
+    for _ in range(10):                       # bounded; history is paginated
+        args: dict[str, Any] = {"status": "all"}
+        if cursor:
+            args["cursor"] = cursor
+        try:
+            page = session.call_tool("get_history", args)
+        except Exception as exc:
+            log(f"get_history failed: {type(exc).__name__}: {exc}")
+            break
+        pages.append(page)
+        blob = json.dumps(page, default=str)
+        match = re.search(r'"next_cursor"\s*:\s*"([^"]+)"', blob)
+        cursor = match.group(1) if match else None
+        if not cursor:
+            break
+
+    (out_dir / "history-raw.json").write_text(
+        json.dumps(pages, indent=2, default=str)[:2_000_000], encoding="utf-8"
+    )
+
+    items: list[dict] = []
+    for page in pages:
+        # Content comes back as JSON strings inside text blocks.
+        for text in (page.get("content") or []) if isinstance(page, dict) else []:
+            try:
+                items += harvest(json.loads(text))
+            except (TypeError, ValueError):
+                pass
+        items += harvest(page)
+
+    by_prompt = {}
+    for item in items:
+        by_prompt.setdefault(normalise(item["prompt"]), item)
+    log(f"history: {len(items)} item(s) with media, {len(by_prompt)} distinct prompt(s)")
+    if not by_prompt:
+        log(f"nothing matched; raw history written to {out_dir / 'history-raw.json'}")
+        return 0
+
+    filled = 0
+    for path in sorted(out_dir.glob("transcript-*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        changed = False
+        for call in data.get("calls", []):
+            if call.get("result_urls") or call.get("blocked") or call.get("failed"):
+                continue
+            requests = call.get("args", {}).get("requests") or [call.get("args", {})]
+            for req in requests:
+                hit = by_prompt.get(normalise(req.get("prompt", "")))
+                if not hit:
+                    continue
+                call.setdefault("result_urls", [])
+                for url in hit["urls"]:
+                    if url not in call["result_urls"]:
+                        call["result_urls"].append(url)
+                changed, filled = True, filled + 1
+                log(f"  {data['task_id']}: matched {len(hit['urls'])} media by prompt")
+        if changed:
+            path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+    return filled
