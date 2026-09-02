@@ -140,8 +140,10 @@ def test_cheap_local_checks_run_before_the_expensive_connection():
 
     from first_try import cli
 
-    source = inspect.getsource(cli.main)
-    # Matched loosely on purpose: the point is the ordering, not the exact call.
+    # Scoped to the run path. Other subcommands legitimately connect without
+    # building a runner at all, so ordering across the whole of main() says
+    # nothing.
+    source = inspect.getsource(cli._run_command)
     assert "_make_runner(args)" in source and "McpSession(" in source
     assert source.index("_make_runner(args)") < source.index("McpSession(")
 

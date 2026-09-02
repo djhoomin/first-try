@@ -31,6 +31,8 @@ class ToolCall:
     result_summary: str = ""
     #: Output media the call produced, for review.
     result_urls: list[str] = field(default_factory=list)
+    #: Job ids the call returned, resolved later by `first-try fetch`.
+    result_request_ids: list[str] = field(default_factory=list)
     started_at: float = field(default_factory=time.time)
 
     @property

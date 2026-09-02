@@ -60,8 +60,16 @@ first-try tasks                    # list the suite
 first-try run --only T09,T11,T12   # the three that cost nothing
 first-try run --resources none     # hide the server's MCP resources
 first-try run --resume             # skip tasks already recorded
+first-try fetch --stdio "..."      # resolve pending generations into images
 first-try review                   # contact sheet for the judgement calls
 ```
+
+Generation is job-shaped: a call returns `{"status": "pending", "request_id": ...}`
+and the render exists minutes later, so a run records receipts rather than
+pictures. `fetch` asks the server what became of each job and writes the media
+URLs back into the transcripts. Run it after a run, give the renders a few
+minutes, and run it again for anything still pending. Everything it calls is
+free.
 
 ## What the suite costs to run
 

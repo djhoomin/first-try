@@ -10,6 +10,7 @@ from pathlib import Path
 from .interceptor import Policy
 from .mcp_client import McpSession, ResourceTools, SessionWithResources
 from .report import render_report
+from .fetch import fetch_outputs
 from .review import render_review
 from .runner_loop import run_suite
 from .tasks import load_tasks
@@ -47,6 +48,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     rep = sub.add_parser("report", help="re-render a report from saved results")
     rep.add_argument("--results", default="results/results.json")
+
+    fet = sub.add_parser("fetch", help="resolve pending generations into finished images")
+    fet.add_argument("--out", default="results")
+    fet.add_argument("--stdio", default="")
+    fet.add_argument("--http", default="")
+    fet.add_argument("--header", action="append", default=[])
 
     rev = sub.add_parser("review", help="build a contact sheet for the outstanding judgement calls")
     rev.add_argument("--out", default="results")
@@ -124,6 +131,23 @@ def main(argv: list[str] | None = None) -> int:
                   f"{'  (forced dry run)' if task.force_dry_run else ''}")
         return 0
 
+    if args.command == "fetch":
+        if not args.stdio and not args.http:
+            sys.exit("supply --stdio or --http")
+        session = McpSession()
+        try:
+            if args.stdio:
+                parts = args.stdio.split()
+                session.connect_stdio(parts[0], parts[1:])
+            else:
+                headers = dict(h.split(":", 1) for h in args.header)
+                session.connect_http(args.http, {k: v.strip() for k, v in headers.items()})
+            n = fetch_outputs(Path(args.out), session, log=lambda m: print(m, file=sys.stderr))
+            print(f"resolved media for {n} job(s)")
+        finally:
+            session.close()
+        return 0
+
     if args.command == "review":
         out = Path(args.out)
         rows = json.loads((out / "results.json").read_text(encoding="utf-8"))
@@ -141,6 +165,11 @@ def main(argv: list[str] | None = None) -> int:
         print(render_report(rows))
         return 0
 
+    return _run_command(args)
+
+
+def _run_command(args) -> int:
+    """The run path: everything cheap and local happens before we connect."""
     tasks = load_tasks(args.tasks)
     if args.only:
         wanted = {t.strip() for t in args.only.split(",")}

@@ -27,6 +27,7 @@ from typing import Any, Awaitable, Callable
 
 __all__ = [
     "McpSession",
+    "request_ids",
     "McpTimeout",
     "ResourceTools",
     "SessionWithResources",
@@ -350,4 +351,27 @@ def image_urls(result: Any) -> list[str]:
     seen: dict[str, None] = {}
     for url in _URL.findall(blob):
         seen.setdefault(url, None)
+    return list(seen)
+
+
+_REQID = __import__("re").compile(r'"(?:root_)?request_id"\s*:\s*"([^"]{6,})"')
+
+
+def request_ids(result: Any) -> list[str]:
+    """Job ids a call returned.
+
+    Generation is job-shaped: the call comes back `pending` with an id, and the
+    image exists some minutes later. Ids have to be captured here, while the
+    whole result is in hand, because what gets stored on the transcript is a
+    truncated summary.
+    """
+    import json as _json
+
+    try:
+        blob = result if isinstance(result, str) else _json.dumps(result, default=str)
+    except (TypeError, ValueError):
+        blob = repr(result)
+    seen: dict[str, None] = {}
+    for rid in _REQID.findall(blob):
+        seen.setdefault(rid, None)
     return list(seen)

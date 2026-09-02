@@ -21,7 +21,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
-from .mcp_client import image_urls
+from .mcp_client import image_urls, request_ids
 from .pricing import estimate_call
 from .transcript import ToolCall, Transcript
 
@@ -139,10 +139,11 @@ class Interceptor:
 
         record.result_summary = _summarise(result)
         record.result_urls = image_urls(result)
+        record.result_request_ids = request_ids(result)
         return result
 
 
-def _summarise(result: Any, limit: int = 400) -> str:
+def _summarise(result: Any, limit: int = 2000) -> str:
     try:
         text = result if isinstance(result, str) else json.dumps(result, default=str)
     except (TypeError, ValueError):
