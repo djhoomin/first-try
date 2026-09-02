@@ -83,6 +83,16 @@ turn one pays for it again on every later turn, and the cost of the suite scales
 with how thorough the agent is. The report prints the cache hit rate; if it is
 low, something is invalidating the prefix.
 
+A second runner is not a nicety: findings that rest on one vendor's models are
+partly measuring that vendor. Any OpenAI-shaped endpoint works.
+
+```bash
+export OPENROUTER_API_KEY=sk-...
+first-try run --runner openai --model google/gemini-3.1-pro-preview \
+  --base-url https://openrouter.ai/api/v1 --api-key-env OPENROUTER_API_KEY \
+  --only T09,T10,T11,T12 --dry-run --stdio "npx -y mcp-remote https://mcp.bfl.ai"
+```
+
 The default runner is `claude-sonnet-5`. A frontier model is not obviously the
 right subject anyway: the interesting question is whether a *typical* agent gets
 the platform right, not whether the most capable one can. Use `--model` to

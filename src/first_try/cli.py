@@ -29,7 +29,10 @@ def build_parser() -> argparse.ArgumentParser:
                      help="default claude-sonnet-5; opus costs several times more per task")
     run.add_argument("--no-cache", action="store_true",
                      help="disable prompt caching (slower and much more expensive)")
-    run.add_argument("--base-url", default="")
+    run.add_argument("--base-url", default="",
+                     help="API root for the openai runner, e.g. https://openrouter.ai/api/v1")
+    run.add_argument("--api-key-env", default="OPENAI_API_KEY",
+                     help="environment variable holding the key, e.g. OPENROUTER_API_KEY")
     run.add_argument("--stdio", default="", help='server command, e.g. "npx -y flux-mcp"')
     run.add_argument("--http", default="", help="server URL")
     run.add_argument("--header", action="append", default=[], help="Name: value, repeatable")
@@ -91,7 +94,10 @@ def _make_runner(args):
         from .runners import OpenAICompatRunner
         if not args.model:
             sys.exit("--model is required for the openai runner")
-        return OpenAICompatRunner(model=args.model, base_url=args.base_url or None)
+        return OpenAICompatRunner(model=args.model, base_url=args.base_url or None,
+                                  api_key_env=args.api_key_env)
+    except RuntimeError as exc:
+        sys.exit(f"\n{exc}\n")
     except ImportError as exc:
         extra = "claude" if args.runner == "claude" else "openai"
         sys.exit(

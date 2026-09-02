@@ -13,7 +13,23 @@ from typing import Any, Callable, Protocol
 
 from .mcp_client import to_anthropic_tools, to_openai_tools
 
-__all__ = ["Runner", "ClaudeRunner", "OpenAICompatRunner", "SYSTEM_PROMPT"]
+__all__ = ["Runner", "ClaudeRunner", "OpenAICompatRunner", "SYSTEM_PROMPT",
+           "normalise_base_url"]
+
+
+def normalise_base_url(url: str | None) -> str | None:
+    """Trim an endpoint path off a base URL.
+
+    The SDK appends "/chat/completions" itself, so pasting the full endpoint
+    from a provider's docs produces a 404 with no useful explanation.
+    """
+    if not url:
+        return None
+    trimmed = url.strip().rstrip("/")
+    for suffix in ("/chat/completions", "/completions", "/responses"):
+        if trimmed.lower().endswith(suffix):
+            trimmed = trimmed[: -len(suffix)]
+    return trimmed or None
 
 SYSTEM_PROMPT = (
     "You are a helpful assistant with access to a set of tools. Use them to do "
@@ -134,16 +150,46 @@ class ClaudeRunner:
 
 
 class OpenAICompatRunner:
-    """Any OpenAI-shaped chat-completions endpoint, for a second opinion."""
+    """Any OpenAI-shaped chat-completions endpoint, for a second opinion.
 
-    def __init__(self, model: str, base_url: str | None = None, api_key_env: str = "OPENAI_API_KEY") -> None:
+    A benchmark whose findings rest on one vendor's models is measuring that
+    vendor as much as the platform, so a second runner is not a nicety.
+    """
+
+    def __init__(self, model: str, base_url: str | None = None,
+                 api_key_env: str = "OPENAI_API_KEY") -> None:
         import os
 
         from openai import OpenAI
 
+        base_url = normalise_base_url(base_url)
+        key = os.environ.get(api_key_env)
+        if not key:
+            raise RuntimeError(
+                f"{api_key_env} is not set. Export it, or pass --api-key-env with the "
+                "name of the variable holding your key."
+            )
         self.name = f"openai:{model}"
         self.model = model
-        self.client = OpenAI(base_url=base_url, api_key=os.environ.get(api_key_env))
+        self.usage: dict[str, int] = {
+            "input_tokens": 0, "output_tokens": 0,
+            "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
+        }
+        self.client = OpenAI(base_url=base_url, api_key=key)
+
+    def _record(self, response) -> None:
+        """Normalise usage into the same shape the Claude runner reports."""
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            return
+        cached = 0
+        details = getattr(usage, "prompt_tokens_details", None)
+        if details is not None:
+            cached = getattr(details, "cached_tokens", 0) or 0
+        prompt = getattr(usage, "prompt_tokens", 0) or 0
+        self.usage["input_tokens"] += max(prompt - cached, 0)
+        self.usage["cache_read_input_tokens"] += cached
+        self.usage["output_tokens"] += getattr(usage, "completion_tokens", 0) or 0
 
     def run(self, *, prompt, setup, tools, invoke, max_turns):
         messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -155,6 +201,7 @@ class OpenAICompatRunner:
             response = self.client.chat.completions.create(
                 model=self.model, messages=messages, tools=to_openai_tools(tools),
             )
+            self._record(response)
             message = response.choices[0].message
             messages.append(message.model_dump(exclude_none=True))
             calls = message.tool_calls or []
