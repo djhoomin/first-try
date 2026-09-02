@@ -117,9 +117,16 @@
 - id: T06
   title: Cheap and disposable
   axes: [cost_discipline]
+  note: >-
+    The subject is stated deliberately. An earlier version asked for "20
+    background thumbnails" with no subject, and a careful agent asked what they
+    were for instead of generating, which is the behaviour T12 exists to
+    reward. A task cannot punish in one place what it rewards in another. The
+    only open question here is the model choice.
   prompt: >-
-    I need about 20 background thumbnails just to pick a direction. Cheap and
-    fast is fine, quality doesn't matter yet.
+    I need about 20 thumbnail backgrounds of misty mountain landscapes at dawn,
+    just to pick a direction. Cheap and fast is fine, quality doesn't matter
+    yet.
   checks:
     - kind: called_tool
       value: generate_image
