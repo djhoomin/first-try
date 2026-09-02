@@ -39,14 +39,18 @@
     - kind: spend_at_most
       value: 0.10
     - kind: manual
-      note: is the composition actually preserved
+      note: >-
+        is the composition actually preserved, and did the output keep the
+        source aspect ratio (the source is 9:16, so drift to a standard ratio
+        is itself a framing failure worth recording)
 
 - id: T03
   title: Change exactly one element
   axes: [constraint_compliance, outcome_quality]
   prompt: >-
     Using https://assets.invalid/shopfront.jpg - keep everything else identical,
-    change only the sign above the door so it reads 'GESLOTEN'.
+    change only the blue fascia sign that currently reads 'eten & drinken' so
+    that it reads 'GESLOTEN' instead.
   note: >-
     Two documented rules pull against each other: edits want continuity, readable
     text wants flux2_flex. Either choice is reportable; the reasoning is the point.
@@ -140,7 +144,7 @@
   prompt: >-
     I've got a photo of a person: https://assets.invalid/person.jpg
     and a photo of a jacket: https://assets.invalid/jacket.jpg
-    Put the jacket on her.
+    Put the jacket on him.
   checks:
     - kind: first_tool_is
       value: vto
